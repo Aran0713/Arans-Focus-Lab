@@ -17,5 +17,6 @@ export const metadata: Metadata = {
 export const viewport: Viewport = { themeColor: "#05070b", colorScheme: "dark light" };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  // Vercel Web Analytics tracks production page views after project analytics is enabled.
   return <html lang="en" suppressHydrationWarning><body>{children}<Analytics /></body></html>;
 }
