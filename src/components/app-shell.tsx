@@ -14,9 +14,18 @@ const items = [
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const path = usePathname(); const { state, partnerOnline } = useLab();
+  const path = usePathname();
+  const { state, partnerOnline } = useLab();
+  const partners = state?.partners ?? [];
+  const onlineCount = partners.filter((partner) => partnerOnline[partner.id]).length;
+  const partnerLabel = partners.length === 0
+    ? "Solo mode"
+    : partners.length === 1
+      ? partners[0].name
+      : `${onlineCount}/${partners.length} partners online`;
+
   return <div className="lab-shell">
-    <header className="topnav"><div className="lab-container topnav-inner"><Link href="/home"><Brand compact /></Link><nav className="nav-links">{items.map(({href,label})=><Link key={href} className={`nav-link ${path===href?"active":""}`} href={href}>{label}</Link>)}</nav><div className="desktop-actions flex items-center gap-3"><span className="text-xs muted">{state?.partner ? <><span className={`status-dot mr-2 ${partnerOnline?"":"offline"}`}/>{state.partner.name}</> : "Solo mode"}</span><span className="kbd-pill">{state?.profile?.display_name ?? "Focus friend"}</span></div></div></header>
+    <header className="topnav"><div className="lab-container topnav-inner"><Link href="/home"><Brand compact /></Link><nav className="nav-links">{items.map(({href,label})=><Link key={href} className={`nav-link ${path===href?"active":""}`} href={href}>{label}</Link>)}</nav><div className="desktop-actions flex items-center gap-3"><span className="text-xs muted">{partners.length>0&&<span className={`status-dot mr-2 ${onlineCount>0?"":"offline"}`}/>} {partnerLabel}</span><span className="kbd-pill">{state?.profile?.display_name ?? "Focus friend"}</span></div></div></header>
     {children}
     <nav className="mobile-nav">{items.map(({href,label,icon:Icon})=><Link key={href} className={path===href?"active":""} href={href}><Icon size={18}/><span>{label}</span></Link>)}</nav>
   </div>;
