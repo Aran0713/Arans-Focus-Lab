@@ -5,7 +5,11 @@ export const metadata: Metadata = {
   title: { default: "Aran’s Focus Lab", template: "%s · Aran’s Focus Lab" },
   description: "A calm, private focus and accountability space for real work, honest breaks, and one focus partner.",
   applicationName: "Aran’s Focus Lab",
-  icons: { icon: "/icon.svg" },
+  icons: {
+    icon: [{ url: "/icon.svg?v=4", type: "image/svg+xml" }],
+    shortcut: "/icon.svg?v=4",
+    apple: "/icon.svg?v=4",
+  },
 };
 
 export const viewport: Viewport = { themeColor: "#05070b", colorScheme: "dark light" };
