@@ -8,37 +8,75 @@ import { useLab } from "@/components/lab-provider";
 function ParticipantTile({ participant }: { participant: DailyParticipant }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const videoTrack = participant.tracks.video.persistentTrack ?? null;
-  const audioTrack = participant.tracks.audio.persistentTrack ?? null;
-  const videoOn = participant.tracks.video.state === "playable" && Boolean(videoTrack);
-  const audioOn = participant.tracks.audio.state === "playable" && Boolean(audioTrack);
+  const [, forceTrackRefresh] = useState(0);
+  const videoState = participant.tracks.video;
+  const audioState = participant.tracks.audio;
+  const videoTrack = videoState.track ?? videoState.persistentTrack ?? null;
+  const audioTrack = audioState.track ?? audioState.persistentTrack ?? null;
+  const videoOn = Boolean(videoTrack) && (videoState.state === "playable" || videoState.state === "loading");
+  const audioOn = Boolean(audioTrack) && (audioState.state === "playable" || audioState.state === "loading");
 
   useEffect(() => {
     const element = videoRef.current;
     if (!element) return;
-    if (videoTrack && videoTrack.readyState !== "ended") {
-      element.srcObject = new MediaStream([videoTrack]);
-      void element.play().catch(() => undefined);
-    } else {
+    if (!videoTrack || videoTrack.readyState === "ended") {
       element.srcObject = null;
+      return;
     }
-    return () => { element.srcObject = null; };
+
+    const stream = new MediaStream([videoTrack]);
+    element.srcObject = stream;
+    element.autoplay = true;
+    element.muted = true;
+    element.playsInline = true;
+
+    const tryPlay = () => {
+      void element.play().catch(() => undefined);
+    };
+    const handleUnmute = () => {
+      forceTrackRefresh(value => value + 1);
+      tryPlay();
+    };
+
+    element.addEventListener("loadedmetadata", tryPlay);
+    element.addEventListener("canplay", tryPlay);
+    videoTrack.addEventListener("unmute", handleUnmute);
+    tryPlay();
+
+    return () => {
+      element.removeEventListener("loadedmetadata", tryPlay);
+      element.removeEventListener("canplay", tryPlay);
+      videoTrack.removeEventListener("unmute", handleUnmute);
+      if (element.srcObject === stream) element.srcObject = null;
+    };
   }, [videoTrack]);
 
   useEffect(() => {
     const element = audioRef.current;
     if (!element || participant.local) return;
-    if (audioTrack && audioTrack.readyState !== "ended") {
-      element.srcObject = new MediaStream([audioTrack]);
-      void element.play().catch(() => undefined);
-    } else {
+    if (!audioTrack || audioTrack.readyState === "ended") {
       element.srcObject = null;
+      return;
     }
-    return () => { element.srcObject = null; };
+
+    const stream = new MediaStream([audioTrack]);
+    element.srcObject = stream;
+    const tryPlay = () => {
+      void element.play().catch(() => undefined);
+    };
+    element.addEventListener("loadedmetadata", tryPlay);
+    audioTrack.addEventListener("unmute", tryPlay);
+    tryPlay();
+
+    return () => {
+      element.removeEventListener("loadedmetadata", tryPlay);
+      audioTrack.removeEventListener("unmute", tryPlay);
+      if (element.srcObject === stream) element.srcObject = null;
+    };
   }, [audioTrack, participant.local]);
 
   return <div className={`video-tile ${participant.local ? "local" : "remote"}`}>
-    {videoOn ? <video ref={videoRef} autoPlay playsInline muted /> : <div className="video-placeholder"><div className="video-avatar">{(participant.user_name || "?").trim().charAt(0).toUpperCase()}</div><span>Camera off</span></div>}
+    {videoOn ? <video ref={videoRef} autoPlay playsInline muted /> : <div className="video-placeholder"><div className="video-avatar">{(participant.user_name || "?").trim().charAt(0).toUpperCase()}</div><span>{videoState.state === "loading" ? "Connecting video…" : "Camera off"}</span></div>}
     {!participant.local && <audio ref={audioRef} autoPlay playsInline />}
     <div className="video-name"><span>{participant.local ? "You" : (participant.user_name || "Focus partner")}</span>{!audioOn && <MicOff size={13}/>}</div>
   </div>;
@@ -135,6 +173,8 @@ export function VideoPanel({ roomId }: { roomId: string }) {
         call.on("participant-joined", sync);
         call.on("participant-updated", sync);
         call.on("participant-left", sync);
+        call.on("track-started", sync);
+        call.on("track-stopped", sync);
         call.on("joined-meeting", () => {
           if (cancelled) return;
           syncParticipants(call);
