@@ -14,7 +14,8 @@ export default function HomePage(){
   const[editingText,setEditingText]=useState("");
   const[dragId,setDragId]=useState<string|null>(null);
   const[scheduledTitle,setScheduledTitle]=useState("");
-  const[scheduledFor,setScheduledFor]=useState("");
+  const[scheduledDate,setScheduledDate]=useState("");
+  const[scheduledTime,setScheduledTime]=useState("");
   const[scheduledDuration,setScheduledDuration]=useState(50);
   const[selectedPartners,setSelectedPartners]=useState<string[]>([]);
 
@@ -44,9 +45,11 @@ export default function HomePage(){
   function togglePartner(id:string){setSelectedPartners(current=>current.includes(id)?current.filter(v=>v!==id):current.length<3?[...current,id]:current)}
   async function schedule(e:FormEvent){
     e.preventDefault();
-    if(!scheduledTitle.trim()||!scheduledFor||selectedPartners.length===0)return;
-    await command("schedule",{title:scheduledTitle.trim(),scheduled_for:new Date(scheduledFor).toISOString(),duration:scheduledDuration*60,weekly:false,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,partner_ids:selectedPartners});
-    setScheduledTitle("");setScheduledFor("");setSelectedPartners([]);
+    if(!scheduledTitle.trim()||!scheduledDate||!scheduledTime||selectedPartners.length===0)return;
+    const scheduledFor = new Date(`${scheduledDate}T${scheduledTime}`);
+    if(Number.isNaN(scheduledFor.getTime()))return;
+    await command("schedule",{title:scheduledTitle.trim(),scheduled_for:scheduledFor.toISOString(),duration:scheduledDuration*60,weekly:false,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,partner_ids:selectedPartners});
+    setScheduledTitle("");setScheduledDate("");setScheduledTime("");setSelectedPartners([]);
   }
 
   return <main className="page"><div className="lab-container">
@@ -70,7 +73,7 @@ export default function HomePage(){
     </section>
 
     {partners.length>0&&<section className="panel p-6 mt-5"><div className="flex items-start justify-between gap-4"><div><p className="eyebrow">SCHEDULE ACCOUNTABILITY</p><h2 className="section-title mt-2">Agree to show up.</h2><p className="muted text-sm mt-2">Pick the people for this session. Everyone RSVPs independently, and the room opens when it’s time.</p></div><CalendarDays className="muted"/></div>
-      <form onSubmit={schedule} className="mt-5 space-y-4"><div className="schedule-form-grid"><input className="form-control" value={scheduledTitle} onChange={e=>setScheduledTitle(e.target.value)} placeholder="Tuesday study session" maxLength={160}/><input className="form-control" type="datetime-local" value={scheduledFor} onChange={e=>setScheduledFor(e.target.value)}/><select className="form-control" value={scheduledDuration} onChange={e=>setScheduledDuration(Number(e.target.value))}><option value={25}>25 min</option><option value={50}>50 min</option><option value={90}>90 min</option></select><button className="btn btn-primary" disabled={busy||!scheduledTitle.trim()||!scheduledFor||selectedPartners.length===0}>Schedule</button></div><div><div className="text-xs muted font-bold mb-2">Invite to this session</div><div className="partner-picker">{partners.map(partner=><button type="button" key={partner.id} className={selectedPartners.includes(partner.id)?"selected":""} onClick={()=>togglePartner(partner.id)}><span className={`status-dot ${partnerOnline[partner.id]?"":"offline"}`}/>{partner.name}{selectedPartners.includes(partner.id)&&<Check size={14}/>}</button>)}</div></div></form>
+      <form onSubmit={schedule} className="mt-5 space-y-4"><div className="schedule-form-grid"><input className="form-control" value={scheduledTitle} onChange={e=>setScheduledTitle(e.target.value)} placeholder="Tuesday study session" maxLength={160}/><div className="schedule-when"><label><span>Date</span><input className="form-control" type="date" value={scheduledDate} onChange={e=>setScheduledDate(e.target.value)}/></label><label><span>Time</span><input className="form-control" type="time" value={scheduledTime} onChange={e=>setScheduledTime(e.target.value)}/></label></div><select className="form-control" value={scheduledDuration} onChange={e=>setScheduledDuration(Number(e.target.value))}><option value={25}>25 min</option><option value={50}>50 min</option><option value={90}>90 min</option></select><button className="btn btn-primary" disabled={busy||!scheduledTitle.trim()||!scheduledDate||!scheduledTime||selectedPartners.length===0}>Schedule</button></div><div><div className="text-xs muted font-bold mb-2">Invite to this session</div><div className="partner-picker">{partners.map(partner=><button type="button" key={partner.id} className={selectedPartners.includes(partner.id)?"selected":""} onClick={()=>togglePartner(partner.id)}><span className={`status-dot ${partnerOnline[partner.id]?"":"offline"}`}/>{partner.name}{selectedPartners.includes(partner.id)&&<Check size={14}/>}</button>)}</div></div></form>
       {upcoming.length>0&&<div className="mt-6 schedule-list">{upcoming.map(s=><ScheduleRow key={s.id} schedule={s} now={now} userId={user?.id??""} busy={busy} command={command}/>)}</div>}
     </section>}
   </div></main>;
