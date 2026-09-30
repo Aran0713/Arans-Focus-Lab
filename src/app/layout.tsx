@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import "./collaboration.css";
 
 export const metadata: Metadata = {
   title: { default: "Aran’s Focus Lab", template: "%s · Aran’s Focus Lab" },
