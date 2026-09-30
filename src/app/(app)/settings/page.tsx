@@ -13,11 +13,23 @@ export default function SettingsPage(){
   const supabase=useMemo(()=>createClient(),[]);
   const[name,setName]=useState("");
   const[invite,setInvite]=useState("");
+  const[inviteError,setInviteError]=useState("");
   if(loading||!state)return<main className="page"><div className="lab-container muted">Loading settings…</div></main>;
   const profile=state.profile;const settings:ProfileSettings=profile.settings??{};const partners=state.partners??[];
 
   async function saveSettings(patch:Partial<ProfileSettings>, displayName?:string){await command("profile",{name:displayName??profile.display_name,settings:{...settings,...patch}})}
-  async function makeInvite(){const result=await command("invite");const token=result?.token;if(typeof token==="string"){const link=`${PUBLIC_SITE}/invite/${token}`;setInvite(link);await navigator.clipboard?.writeText(link)}}
+  async function makeInvite(){
+    if(!supabase)return;
+    setInviteError("");
+    const{data,error}=await supabase.rpc("create_partner_invite");
+    if(error){setInviteError(error.message);return}
+    const result=data as unknown as {token?:string};
+    if(typeof result?.token==="string"){
+      const link=`${PUBLIC_SITE}/invite/${result.token}`;
+      setInvite(link);
+      try{await navigator.clipboard?.writeText(link)}catch{}
+    }
+  }
   async function saveName(e:FormEvent){e.preventDefault();await saveSettings({},name.trim()||profile.display_name);setName("")}
   async function signOut(){await supabase?.auth.signOut();window.location.assign("/login")}
 
@@ -28,7 +40,7 @@ export default function SettingsPage(){
 
       <section className="panel setting-card"><div className="flex justify-between"><div><p className="eyebrow">FOCUS PARTNERS</p><h2 className="section-title mt-2">{partners.length}/3 trusted people</h2></div><Users className="muted" size={20}/></div><p className="muted text-sm mt-3">Each connection is private by default. Partners only see one another when you invite them into the same room.</p>
         {partners.length>0&&<div className="mt-4 space-y-3">{partners.map(partner=><div className="partner-row" key={partner.id}><div className="min-w-0"><div className="font-bold truncate">{partner.name}</div><div className="text-xs muted mt-1"><span className={`status-dot mr-2 ${partnerOnline[partner.id]?"":"offline"}`}/>{partnerOnline[partner.id]?"Online":"Offline"}</div></div><button disabled={busy} className="btn btn-danger btn-small" onClick={()=>command("disconnect",{partner_id:partner.id})}>Disconnect</button></div>)}</div>}
-        {partners.length<3&&<><button disabled={busy} className="btn btn-secondary mt-5" onClick={makeInvite}><Copy size={16}/>Copy new invite link</button>{invite&&<div className="info-box mt-3 break-all">{invite}</div>}<p className="text-xs muted mt-3">Invite links expire after seven days and can be used once.</p></>}
+        {partners.length<3&&<><button disabled={busy} className="btn btn-secondary mt-5" onClick={makeInvite}><Copy size={16}/>Copy new invite link</button>{invite&&<div className="info-box mt-3 break-all">{invite}</div>}{inviteError&&<div className="error-box mt-3">{inviteError}</div>}<p className="text-xs muted mt-3">Each link expires after seven days and can be used once. You can create separate active links for different friends.</p></>}
       </section>
 
       <section className="panel setting-card"><p className="eyebrow">DEFAULT FOCUS</p><h2 className="section-title mt-2">How you usually start</h2><div className="segmented mt-5">{(["open","25","50","90","custom"] as FocusDefault[]).map(v=><button key={v} className={(settings.focusDefault??"open")===v?"active":""} onClick={()=>saveSettings({focusDefault:v})}>{v==="open"?"Open-ended":v==="25"?"Pomodoro · 25/5":v==="custom"?"Custom":`${v} min`}</button>)}</div></section>
