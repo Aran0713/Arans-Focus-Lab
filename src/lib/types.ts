@@ -49,6 +49,8 @@ export type RoomMember = {
   title: string;
   goals: string[];
   ready: boolean;
+  is_present: boolean;
+  left_at: string | null;
   name: string;
   session: RoomMemberSession | null;
 };
@@ -85,6 +87,7 @@ export type LabState = {
   partner: Partner | null;
   sessions: FocusSession[];
   room: FocusRoom | null;
+  available_rooms: FocusRoom[];
   schedules: ScheduledSession[];
 };
 
