@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
@@ -33,8 +34,8 @@ export function LabProvider({ children }: { children: React.ReactNode }) {
   const channelRef = useRef<RealtimeChannel | null>(null);
   const supabase = useMemo(() => createClient(), []);
 
-  const pushNotice = useCallback((title: string, message?: string, tone: Notice["tone"] = "default") => {
-    setNotice({ id: crypto.randomUUID(), title, message, tone });
+  const pushNotice = useCallback((title: string, message?: string, tone: Notice["tone"] = "default", action?: Pick<Notice, "actionLabel" | "actionHref">) => {
+    setNotice({ id: crypto.randomUUID(), title, message, tone, ...action });
   }, []);
 
   const refresh = useCallback(async () => {
@@ -84,14 +85,19 @@ export function LabProvider({ children }: { children: React.ReactNode }) {
       })
       .on("broadcast", { event: "state_changed" }, () => refresh())
       .on("broadcast", { event: "focus_invite" }, ({ payload }) => {
-        pushNotice(`${state.partner?.name ?? "Your focus partner"} wants to focus`, typeof payload?.title === "string" ? payload.title : undefined, "success");
+        const partnerName = state.partner?.name ?? "Your focus partner";
+        const message = typeof payload?.title === "string" ? payload.title : "A shared room is ready.";
+        pushNotice(`${partnerName} wants to focus`, message, "success", { actionLabel: "Open focus", actionHref: "/focus" });
+        if (state.profile.settings?.notifications && "Notification" in window && Notification.permission === "granted") {
+          new Notification(`${partnerName} wants to focus`, { body: message, icon: "/icon.svg?v=4" });
+        }
         refresh();
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") await channel.track({ online_at: new Date().toISOString(), page: window.location.pathname });
       });
     return () => { channelRef.current = null; supabase.removeChannel(channel); };
-  }, [pushNotice, refresh, state?.partner?.id, state?.partner?.name, state?.partner?.partnership_id, supabase, user]);
+  }, [pushNotice, refresh, state?.partner?.id, state?.partner?.name, state?.partner?.partnership_id, state?.profile?.settings?.notifications, supabase, user]);
 
   useEffect(() => {
     const onFocus = () => refresh();
@@ -118,7 +124,7 @@ export function LabProvider({ children }: { children: React.ReactNode }) {
     refresh, command, broadcast, notice, clearNotice: () => setNotice(null),
   }), [broadcast, busy, command, loading, notice, partnerOnline, refresh, state, user]);
 
-  return <LabContext.Provider value={value}>{children}{notice && <div className="toast panel p-4"><div className="flex gap-3 justify-between"><div><div className="font-bold">{notice.title}</div>{notice.message && <div className="text-sm muted mt-1">{notice.message}</div>}</div><button className="text-[var(--muted)]" aria-label="Dismiss" onClick={() => setNotice(null)}>×</button></div></div>}</LabContext.Provider>;
+  return <LabContext.Provider value={value}>{children}{notice && <div className="toast panel p-4"><div className="flex gap-3 justify-between"><div><div className="font-bold">{notice.title}</div>{notice.message && <div className="text-sm muted mt-1">{notice.message}</div>}{notice.actionHref&&notice.actionLabel&&<Link className="btn btn-secondary mt-3" href={notice.actionHref} onClick={()=>setNotice(null)}>{notice.actionLabel}</Link>}</div><button className="text-[var(--muted)] self-start" aria-label="Dismiss" onClick={() => setNotice(null)}>×</button></div></div>}</LabContext.Provider>;
 }
 
 export function useLab() {
