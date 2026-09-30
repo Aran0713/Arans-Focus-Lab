@@ -11,6 +11,7 @@ export default function HomePage(){
   const{state,user,loading,busy,partnerOnline,broadcast,command}=useLab();
   const[draft,setDraft]=useState("");
   if(loading||!state)return <main className="page"><div className="lab-container muted">Loading Focus Lab…</div></main>;
+  const profile=state.profile;
   const now=new Date();
   const today=rangeTotals(state.sessions,startOfDay(now),addDays(startOfDay(now),1));
   const active=state.sessions.find(s=>s.status!=="finished");
@@ -19,11 +20,11 @@ export default function HomePage(){
   const attending=nextSchedule?.rsvps.includes(user?.id??"")??false;
   const bothCommitted=(nextSchedule?.rsvps.length??0)>=2;
   const canOpen=Boolean(scheduleTime&&scheduleTime.getTime()<=now.getTime()+15*60*1000&&scheduleTime.getTime()>now.getTime()-2*60*60*1000);
-  const settings=state.profile.settings??{};
+  const settings=profile.settings??{};
   const dateKey=localDateKey(now);
   const commitments:TodayCommitment[]=settings.today3?.date===dateKey?settings.today3.items:[];
 
-  async function saveToday(items:TodayCommitment[]){await command("profile",{name:state.profile.display_name,settings:{...settings,today3:{date:dateKey,items}}})}
+  async function saveToday(items:TodayCommitment[]){await command("profile",{name:profile.display_name,settings:{...settings,today3:{date:dateKey,items}}})}
   async function addCommitment(){const text=draft.trim();if(!text||commitments.length>=3)return;await saveToday([...commitments,{id:crypto.randomUUID(),text,done:false}]);setDraft("")}
   async function toggleCommitment(id:string){await saveToday(commitments.map(item=>item.id===id?{...item,done:!item.done}:item))}
 
