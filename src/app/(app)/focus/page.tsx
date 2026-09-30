@@ -310,7 +310,7 @@ function SharedGoalsBoard({ room, session }: { room: FocusRoom; session: FocusSe
   );
 }
 
-function SessionSummary({ session, onDone, onAnother }: { session: FocusSession; onDone: () => void | Promise<void>; onAnother: () => void | Promise<void> }) {
+function SessionSummary({ session, onDone, onAnother, onRejoin }: { session: FocusSession; onDone: () => void | Promise<void>; onAnother: () => void | Promise<void>; onRejoin?: () => void | Promise<void> }) {
   const { command, busy } = useLab();
   const totals = sessionTotals(session, session.finished_at ? new Date(session.finished_at).getTime() : Date.now());
   const completed = session.goals.filter((g) => g.completed).length;
@@ -323,7 +323,12 @@ function SessionSummary({ session, onDone, onAnother }: { session: FocusSession;
       <div className="grid-3 mt-3 text-left"><div className="stat"><div className="stat-label">Focus ratio</div><div className="stat-value">{Math.round(totals.focusRatio)}%</div></div><div className="stat"><div className="stat-label">Focus periods</div><div className="stat-value">{totals.focusPeriods}</div></div><div className="stat"><div className="stat-label">Goals</div><div className="stat-value">{completed}/{session.goals.length}</div></div></div>
       {session.goals.length > 0 && <div className="goals mt-6 max-w-xl mx-auto">{session.goals.map((g) => <div key={g.id} className={`goal ${g.completed ? "done" : ""}`}><span className="w-[19px] h-[19px] grid place-items-center">{g.completed ? <Check size={15} /> : null}</span><span className="goal-text">{g.text}</span></div>)}</div>}
       <div className="mt-7"><div className="text-xs muted font-bold mb-3">How did that session feel?</div><div className="segmented justify-center">{([[1, "Poor"], [2, "Okay"], [3, "Good"], [4, "Great"]] as const).map(([value, label]) => <button key={value} disabled={busy} className={session.rating === value ? "active" : ""} onClick={() => command("rate", { session_id: session.id, rating: value })}>{label}</button>)}</div></div>
-      <div className="flex flex-wrap justify-center gap-3 mt-7"><button className="btn btn-primary" disabled={busy} onClick={onDone}>Done</button><button className="btn btn-secondary" disabled={busy} onClick={onAnother}>Start Another</button></div>
+      {onRejoin && <div className="info-box mt-6 text-left"><b>Want to keep going?</b> Rejoin the shared room and this same session continues. Your focus time and goals stay intact.</div>}
+      <div className="flex flex-wrap justify-center gap-3 mt-7">
+        {onRejoin && <button className="btn btn-primary" disabled={busy} onClick={onRejoin}><RotateCcw size={16} />Rejoin shared focus</button>}
+        <button className={onRejoin ? "btn btn-secondary" : "btn btn-primary"} disabled={busy} onClick={onDone}>Done</button>
+        <button className="btn btn-secondary" disabled={busy} onClick={onAnother}>Start Another</button>
+      </div>
     </section>
   );
 }
@@ -368,6 +373,7 @@ function RoomObserver({ room }: { room: FocusRoom }) {
   const isCreator = room.created_by === user?.id;
   const otherActive = active.filter((m) => m.user_id !== user?.id);
 
+  async function rejoinFocus() { await command("rejoin_room", { room_id: room.id }); }
   async function leaveAndStartAnother() { await command("leave_room", { room_id: room.id }); }
   async function leaveAndGoHome() { await command("leave_room", { room_id: room.id }); window.location.assign("/home"); }
 
@@ -376,12 +382,13 @@ function RoomObserver({ room }: { room: FocusRoom }) {
       <p className="eyebrow">SHARED ROOM</p>
       <h1 className="text-3xl sm:text-4xl font-extrabold mt-2">Your part is finished.</h1>
       <p className="lead mt-2">{otherActive.length ? `${otherActive.map((m) => m.name).join(", ")} ${otherActive.length === 1 ? "is" : "are"} still working.` : "Everyone else here is finished."}</p>
-      <div className="info-box mt-5"><b>You’re not stuck here.</b> Start something else now, or stay and watch the room. If you leave, this room stays available to rejoin while it’s still open.</div>
+      <div className="info-box mt-5"><b>You can jump back in.</b> Rejoin focus to continue this same session, or leave and start something else. Your earlier focus time and goals stay recorded.</div>
       <div className="room-goals-grid mt-6">
         {room.members.filter((m) => m.is_present).map((member) => <div className={`participant-card ${member.session?.status === "finished" ? "finished" : ""}`} key={member.user_id}><div className="flex justify-between gap-3"><div><div className="font-extrabold">{member.user_id === user?.id ? "You" : member.name}</div><div className="text-sm muted mt-1">{member.session?.title || member.title}</div></div><span className={`room-status ${member.session?.status ?? "waiting"}`}>{sessionStatus(member)}</span></div><ReadOnlyGoals goals={member.session?.goals ?? []} /></div>)}
       </div>
       <div className="flex gap-3 mt-6 flex-wrap">
-        <button className="btn btn-primary" disabled={busy} onClick={leaveAndStartAnother}>Start another focus</button>
+        <button className="btn btn-primary" disabled={busy} onClick={rejoinFocus}><RotateCcw size={16} />Rejoin focus</button>
+        <button className="btn btn-secondary" disabled={busy} onClick={leaveAndStartAnother}>Start another focus</button>
         <button className="btn btn-secondary" disabled={busy} onClick={leaveAndGoHome}><LogOut size={16} />Leave room & go Home</button>
         {isCreator && <button className="btn btn-ghost" disabled={busy} onClick={() => command("cancel_room", { room_id: room.id })}>End shared room for everyone</button>}
       </div>
@@ -429,7 +436,12 @@ function FocusPageInner() {
       setFinishedId(null);
       if (goHome) window.location.assign("/home");
     };
-    return <main className="page"><div className="lab-container max-w-4xl"><SessionSummary session={finished} onDone={() => leaveFinishedRoom(true)} onAnother={() => leaveFinishedRoom(false)} /></div></main>;
+    const rejoinFinishedRoom = async () => {
+      if (!finishedRoom) return;
+      await command("rejoin_room", { room_id: finishedRoom.id });
+      setFinishedId(null);
+    };
+    return <main className="page"><div className="lab-container max-w-4xl"><SessionSummary session={finished} onDone={() => leaveFinishedRoom(true)} onAnother={() => leaveFinishedRoom(false)} onRejoin={finishedRoom ? rejoinFinishedRoom : undefined} /></div></main>;
   }
 
   const active = state.sessions.find((s) => s.status !== "finished");
