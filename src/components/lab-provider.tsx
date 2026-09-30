@@ -7,12 +7,13 @@ import { createClient } from "@/lib/supabase/client";
 import type { LabState, Notice } from "@/lib/types";
 
 type CommandResult = Record<string, unknown> | null;
+type OnlineMap = Record<string, boolean>;
 type LabContextValue = {
   user: User | null;
   state: LabState | null;
   loading: boolean;
   busy: boolean;
-  partnerOnline: boolean;
+  partnerOnline: OnlineMap;
   serverNow: () => number;
   refresh: () => Promise<void>;
   command: (action: string, payload?: Record<string, unknown>) => Promise<CommandResult>;
@@ -28,11 +29,13 @@ export function LabProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<LabState | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [partnerOnline, setPartnerOnline] = useState(false);
+  const [partnerOnline, setPartnerOnline] = useState<OnlineMap>({});
   const [notice, setNotice] = useState<Notice | null>(null);
   const clockOffset = useRef(0);
-  const channelRef = useRef<RealtimeChannel | null>(null);
+  const channelsRef = useRef<Map<string, RealtimeChannel>>(new Map());
   const supabase = useMemo(() => createClient(), []);
+  const partnersKey = (state?.partners ?? []).map((p) => `${p.id}:${p.partnership_id}`).sort().join("|");
+  const roomKey = state?.room?.id ?? "";
 
   const pushNotice = useCallback((title: string, message?: string, tone: Notice["tone"] = "default", action?: Pick<Notice, "actionLabel" | "actionHref">) => {
     setNotice({ id: crypto.randomUUID(), title, message, tone, ...action });
@@ -52,19 +55,28 @@ export function LabProvider({ children }: { children: React.ReactNode }) {
   }, [pushNotice, supabase]);
 
   const broadcast = useCallback(async (event: string, payload: Record<string, unknown> = {}) => {
-    if (!channelRef.current) return;
-    await channelRef.current.send({ type: "broadcast", event, payload });
-  }, []);
+    const targetIds = Array.isArray(payload.partner_ids) ? new Set(payload.partner_ids.filter((v): v is string => typeof v === "string")) : null;
+    const enriched = { ...payload, sender_id: user?.id, sender_name: state?.profile?.display_name };
+    const sends: Promise<unknown>[] = [];
+    for (const [key, channel] of channelsRef.current.entries()) {
+      if (targetIds && key.startsWith("partner:") && !targetIds.has(key.slice("partner:".length))) continue;
+      sends.push(channel.send({ type: "broadcast", event, payload: enriched }));
+    }
+    await Promise.allSettled(sends);
+  }, [state?.profile?.display_name, user?.id]);
 
   const command = useCallback(async (action: string, payload: Record<string, unknown> = {}) => {
     if (!supabase) throw new Error("Supabase is not configured.");
     setBusy(true);
-    const { data, error } = await supabase.rpc("lab_command", { action, p: payload, request_id: crypto.randomUUID() });
-    if (error) { setBusy(false); pushNotice("That didn’t work", error.message, "warning"); throw error; }
-    await refresh();
-    await broadcast("state_changed", { action });
-    setBusy(false);
-    return data as CommandResult;
+    try {
+      const { data, error } = await supabase.rpc("lab_command", { action, p: payload, request_id: crypto.randomUUID() });
+      if (error) { pushNotice("That didn’t work", error.message, "warning"); throw error; }
+      await refresh();
+      await broadcast("state_changed", { action });
+      return data as CommandResult;
+    } finally {
+      setBusy(false);
+    }
   }, [broadcast, pushNotice, refresh, supabase]);
 
   useEffect(() => {
@@ -75,38 +87,62 @@ export function LabProvider({ children }: { children: React.ReactNode }) {
   }, [refresh, supabase]);
 
   useEffect(() => {
-    if (!supabase || !state?.partner?.partnership_id || !user) { setPartnerOnline(false); return; }
-    const channel = supabase.channel(`focus-partnership:${state.partner.partnership_id}`, { config: { presence: { key: user.id } } });
-    channelRef.current = channel;
-    channel
-      .on("presence", { event: "sync" }, () => {
-        const presence = channel.presenceState();
-        setPartnerOnline(Boolean(state.partner && presence[state.partner.id]?.length));
-      })
-      .on("broadcast", { event: "state_changed" }, () => refresh())
-      .on("broadcast", { event: "focus_invite" }, ({ payload }) => {
-        const partnerName = state.partner?.name ?? "Your focus partner";
-        const message = typeof payload?.title === "string" ? payload.title : "A shared room is ready.";
-        pushNotice(`${partnerName} wants to focus`, message, "success", { actionLabel: "Open focus", actionHref: "/focus" });
-        if (state.profile.settings?.notifications && "Notification" in window && Notification.permission === "granted") {
-          new Notification(`${partnerName} wants to focus`, { body: message, icon: "/icon.svg?v=4" });
-        }
-        refresh();
-      })
-      .subscribe(async (status) => {
-        if (status === "SUBSCRIBED") await channel.track({ online_at: new Date().toISOString(), page: window.location.pathname });
-      });
-    return () => { channelRef.current = null; supabase.removeChannel(channel); };
-  }, [pushNotice, refresh, state?.partner?.id, state?.partner?.name, state?.partner?.partnership_id, state?.profile?.settings?.notifications, supabase, user]);
+    if (!supabase || !user) return;
+    const channels = channelsRef.current;
+    for (const channel of channels.values()) supabase.removeChannel(channel);
+    channels.clear();
+    setPartnerOnline({});
+
+    const partners = state?.partners ?? [];
+    for (const partner of partners) {
+      const key = `partner:${partner.id}`;
+      const channel = supabase.channel(`focus-partnership:${partner.partnership_id}`, { config: { presence: { key: user.id } } });
+      channels.set(key, channel);
+      channel
+        .on("presence", { event: "sync" }, () => {
+          const presence = channel.presenceState();
+          setPartnerOnline((current) => ({ ...current, [partner.id]: Boolean(presence[partner.id]?.length) }));
+        })
+        .on("broadcast", { event: "state_changed" }, () => refresh())
+        .on("broadcast", { event: "focus_invite" }, ({ payload }) => {
+          const sender = typeof payload?.sender_name === "string" ? payload.sender_name : partner.name;
+          const message = typeof payload?.title === "string" ? payload.title : "A shared room is ready.";
+          pushNotice(`${sender} wants to focus`, message, "success", { actionLabel: "Open focus", actionHref: "/focus" });
+          if (state?.profile?.settings?.notifications && "Notification" in window && Notification.permission === "granted") {
+            new Notification(`${sender} wants to focus`, { body: message, icon: "/icon.svg?v=5" });
+          }
+          refresh();
+        })
+        .subscribe(async (status) => {
+          if (status === "SUBSCRIBED") await channel.track({ online_at: new Date().toISOString(), page: window.location.pathname });
+        });
+    }
+
+    if (state?.room?.id) {
+      const channel = supabase.channel(`focus-room:${state.room.id}`, { config: { presence: { key: user.id } } });
+      channels.set(`room:${state.room.id}`, channel);
+      channel
+        .on("broadcast", { event: "state_changed" }, () => refresh())
+        .subscribe(async (status) => {
+          if (status === "SUBSCRIBED") await channel.track({ online_at: new Date().toISOString(), page: window.location.pathname });
+        });
+    }
+
+    return () => {
+      for (const channel of channels.values()) supabase.removeChannel(channel);
+      channels.clear();
+    };
+  }, [partnersKey, roomKey, pushNotice, refresh, state?.partners, state?.profile?.settings?.notifications, state?.room?.id, supabase, user]);
 
   useEffect(() => {
     const onFocus = () => refresh();
     const onVisibility = () => { if (document.visibilityState === "visible") refresh(); };
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisibility);
-    const timer = window.setInterval(refresh, 60_000);
+    const cadence = state?.room && ["waiting", "active"].includes(state.room.status) ? 8_000 : 60_000;
+    const timer = window.setInterval(refresh, cadence);
     return () => { window.removeEventListener("focus", onFocus); document.removeEventListener("visibilitychange", onVisibility); clearInterval(timer); };
-  }, [refresh]);
+  }, [refresh, state?.room?.id, state?.room?.status]);
 
   useEffect(() => {
     const appearance = state?.profile?.settings?.appearance ?? "system";
@@ -115,7 +151,9 @@ export function LabProvider({ children }: { children: React.ReactNode }) {
       const light = appearance === "light" || (appearance === "system" && mq.matches);
       document.documentElement.dataset.theme = light ? "light" : "dark";
     };
-    apply(); mq.addEventListener("change", apply); return () => mq.removeEventListener("change", apply);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
   }, [state?.profile?.settings?.appearance]);
 
   const value = useMemo<LabContextValue>(() => ({
