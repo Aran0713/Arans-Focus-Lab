@@ -59,16 +59,19 @@ function SessionSetup({ shared=false, schedule }: { shared?:boolean; schedule?:S
 }
 
 function WaitingRoom(){
-  const{state,user,command,busy,broadcast}=useLab();const room=state?.room;if(!room||room.status!=="waiting")return null;
+  const{state,user,command,busy,broadcast}=useLab();
+  const room=state?.room;
+  if(!room||room.status!=="waiting")return null;
+  const roomId=room.id;
   const me=room.members.find(m=>m.user_id===user?.id);
   const[title,setTitle]=useState(me?.title??"");
   const[goalsText,setGoalsText]=useState(Array.isArray(me?.goals)?me.goals.join("\n"):"");
   const goals=parseGoals(goalsText);
-  async function saveDraft(){if(!me||!title.trim())return;await command("room_member_update",{room_id:room.id,title:title.trim(),goals});await broadcast("state_changed",{room_id:room.id})}
-  async function ready(){if(!me||!title.trim())return;await command("ready",{room_id:room.id,title:title.trim(),goals})}
+  async function saveDraft(){if(!me||!title.trim())return;await command("room_member_update",{room_id:roomId,title:title.trim(),goals});await broadcast("state_changed",{room_id:roomId})}
+  async function ready(){if(!me||!title.trim())return;await command("ready",{room_id:roomId,title:title.trim(),goals})}
   return <><section className="panel p-6 sm:p-8"><div className="flex items-start justify-between gap-5"><div><p className="eyebrow">SHARED ROOM</p><h2 className="text-3xl font-extrabold mt-2">Meet here, then disappear into the work.</h2><p className="muted mt-2">Everyone can see this room’s goals. Private history and statistics stay private.</p></div><span className="kbd-pill">{room.members.filter(m=>m.ready).length}/{room.members.length} ready</span></div>
     <div className="waiting-grid mt-7">{room.members.map(member=>member.user_id===user?.id?<div className="participant-card mine" key={member.user_id}><ParticipantHead member={member} you/><label className="field mt-4"><span>Working on</span><input value={title} onChange={e=>setTitle(e.target.value)} disabled={member.ready}/></label><label className="field mt-4"><span>Goals · one per line</span><textarea value={goalsText} onChange={e=>setGoalsText(e.target.value)} disabled={member.ready}/></label><div className="flex gap-2 mt-4 flex-wrap">{!member.ready&&<button className="btn btn-ghost" disabled={busy||!title.trim()} onClick={saveDraft}>Save draft</button>}<button className="btn btn-primary" disabled={busy||member.ready||!title.trim()} onClick={ready}>{member.ready?"Ready ✓":"I’m ready"}</button></div></div>:<WaitingMemberCard member={member} key={member.user_id}/>)}</div>
-    <div className="flex gap-3 mt-5 flex-wrap"><button className="btn btn-ghost" disabled={busy} onClick={()=>command("cancel_room",{room_id:room.id})}>Cancel room</button></div></section><div className="mt-5"><VideoPanel roomId={room.id}/></div></>;
+    <div className="flex gap-3 mt-5 flex-wrap"><button className="btn btn-ghost" disabled={busy} onClick={()=>command("cancel_room",{room_id:roomId})}>Cancel room</button></div></section><div className="mt-5"><VideoPanel roomId={roomId}/></div></>;
 }
 
 function WaitingMemberCard({member}:{member:RoomMember}){const goals=Array.isArray(member.goals)?member.goals:[];return <div className="participant-card"><ParticipantHead member={member}/><div className="mt-5 text-xl font-bold">{member.title||"Waiting for their plan…"}</div>{goals.length?<div className="goals mt-4">{goals.map((goal,index)=><div className="goal" key={`${goal}-${index}`}><span className="goal-bullet"/><span className="goal-text">{goal}</span></div>)}</div>:<p className="muted text-sm mt-3">Their shared-session goals will appear here.</p>}</div>}
