@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
 const DAILY_API = "https://api.daily.co/v1";
+type VideoAccess = { room_id: string; status: string; user_id: string; user_name: string; member_count: number };
 
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
@@ -20,8 +21,10 @@ export async function POST(request: Request) {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) return jsonError("Please sign in.", 401);
 
-  const { data: access, error: accessError } = await supabase.rpc("video_access", { room_id: body.roomId });
-  if (accessError || !access) return jsonError(accessError?.message || "You do not have access to this room.", 403);
+  const { data, error: accessError } = await supabase.rpc("video_access", { room_id: body.roomId });
+  if (accessError || !data) return jsonError(accessError?.message || "You do not have access to this room.", 403);
+  const access = data as unknown as VideoAccess;
+  if (access.member_count < 2 || access.member_count > 4) return jsonError("This room cannot start video.", 403);
 
   const roomName = `focus-${body.roomId.replace(/-/g, "")}`;
   const headers = { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" };
@@ -42,8 +45,8 @@ export async function POST(request: Request) {
           enable_prejoin_ui: true,
           enable_chat: false,
           enable_screenshare: false,
-          start_video_off: false,
-          start_audio_off: false,
+          enable_recording: false,
+          start_with_video_off: false,
           eject_at_room_exp: true,
         },
       }),
@@ -71,10 +74,8 @@ export async function POST(request: Request) {
         user_name: access.user_name,
         user_id: access.user_id,
         enable_screenshare: false,
-        start_video_off: false,
-        start_audio_off: false,
-        enable_prejoin_ui: true,
-        enable_recording_ui: false,
+        enable_recording: false,
+        start_with_video_off: false,
         start_cloud_recording: false,
       },
     }),
@@ -89,9 +90,5 @@ export async function POST(request: Request) {
   const tokenData = await tokenResponse.json() as { token?: string };
   if (!tokenData.token) return jsonError("Video authorization returned no token.", 502);
 
-  return NextResponse.json({
-    url: `${domain}/${roomName}`,
-    token: tokenData.token,
-    roomName,
-  });
+  return NextResponse.json({ url: `${domain}/${roomName}`, token: tokenData.token, roomName });
 }
