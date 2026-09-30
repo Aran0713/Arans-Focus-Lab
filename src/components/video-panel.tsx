@@ -1,15 +1,67 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Camera, CameraOff, Loader2, X } from "lucide-react";
-import type { DailyCall } from "@daily-co/daily-js";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Camera, Loader2, Mic, MicOff, PhoneOff, Video, VideoOff } from "lucide-react";
+import type { DailyCall, DailyParticipant } from "@daily-co/daily-js";
+import { useLab } from "@/components/lab-provider";
+
+function ParticipantTile({ participant }: { participant: DailyParticipant }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const videoTrack = participant.tracks.video.persistentTrack ?? null;
+  const audioTrack = participant.tracks.audio.persistentTrack ?? null;
+  const videoOn = participant.tracks.video.state === "playable" && Boolean(videoTrack);
+  const audioOn = participant.tracks.audio.state === "playable" && Boolean(audioTrack);
+
+  useEffect(() => {
+    const element = videoRef.current;
+    if (!element) return;
+    if (videoTrack && videoTrack.readyState !== "ended") {
+      element.srcObject = new MediaStream([videoTrack]);
+      void element.play().catch(() => undefined);
+    } else {
+      element.srcObject = null;
+    }
+    return () => { element.srcObject = null; };
+  }, [videoTrack]);
+
+  useEffect(() => {
+    const element = audioRef.current;
+    if (!element || participant.local) return;
+    if (audioTrack && audioTrack.readyState !== "ended") {
+      element.srcObject = new MediaStream([audioTrack]);
+      void element.play().catch(() => undefined);
+    } else {
+      element.srcObject = null;
+    }
+    return () => { element.srcObject = null; };
+  }, [audioTrack, participant.local]);
+
+  return <div className={`video-tile ${participant.local ? "local" : "remote"}`}>
+    {videoOn ? <video ref={videoRef} autoPlay playsInline muted /> : <div className="video-placeholder"><div className="video-avatar">{(participant.user_name || "?").trim().charAt(0).toUpperCase()}</div><span>Camera off</span></div>}
+    {!participant.local && <audio ref={audioRef} autoPlay playsInline />}
+    <div className="video-name"><span>{participant.local ? "You" : (participant.user_name || "Focus partner")}</span>{!audioOn && <MicOff size={13}/>}</div>
+  </div>;
+}
 
 export function VideoPanel({ roomId }: { roomId: string }) {
+  const { state } = useLab();
   const [open, setOpen] = useState(false);
   const [joining, setJoining] = useState(false);
+  const [joined, setJoined] = useState(false);
   const [error, setError] = useState("");
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [participants, setParticipants] = useState<Record<string, DailyParticipant>>({});
   const callRef = useRef<DailyCall | null>(null);
+  const canUseVideo = state?.room?.id === roomId && state.room.status === "active";
+
+  const visibleParticipants = useMemo(() => Object.values(participants).filter(Boolean), [participants]);
+  const localParticipant = visibleParticipants.find(participant => participant.local);
+  const cameraOn = localParticipant?.tracks.video.state === "playable";
+  const micOn = localParticipant?.tracks.audio.state === "playable";
+
+  function syncParticipants(call: DailyCall) {
+    setParticipants({ ...call.participants() });
+  }
 
   async function stopVideo() {
     const call = callRef.current;
@@ -18,25 +70,51 @@ export function VideoPanel({ roomId }: { roomId: string }) {
       try { await call.leave(); } catch {}
       try { call.destroy(); } catch {}
     }
-    setOpen(false);
+    setParticipants({});
+    setJoined(false);
     setJoining(false);
+    setOpen(false);
+  }
+
+  async function toggleCamera() {
+    const call = callRef.current;
+    if (!call || !joined) return;
+    try {
+      await call.setLocalVideo(!cameraOn);
+      syncParticipants(call);
+    } catch {
+      setError("Couldn’t change the camera. Check browser permissions and try again.");
+    }
+  }
+
+  async function toggleMic() {
+    const call = callRef.current;
+    if (!call || !joined) return;
+    try {
+      await call.setLocalAudio(!micOn);
+      syncParticipants(call);
+    } catch {
+      setError("Couldn’t change the microphone. Check browser permissions and try again.");
+    }
   }
 
   useEffect(() => () => {
     const call = callRef.current;
     callRef.current = null;
     if (call) {
-      try { call.leave(); } catch {}
-      try { call.destroy(); } catch {}
+      void call.leave().catch(() => undefined).finally(() => {
+        try { call.destroy(); } catch {}
+      });
     }
   }, []);
 
   useEffect(() => {
-    if (!open || !containerRef.current || callRef.current) return;
+    if (!open || !canUseVideo || callRef.current) return;
     let cancelled = false;
 
     (async () => {
       setJoining(true);
+      setJoined(false);
       setError("");
       try {
         const response = await fetch("/api/video/session", {
@@ -46,53 +124,82 @@ export function VideoPanel({ roomId }: { roomId: string }) {
         });
         const session = await response.json() as { url?: string; token?: string; error?: string };
         if (!response.ok || !session.url || !session.token) throw new Error(session.error || "Video could not start.");
-        if (cancelled || !containerRef.current) return;
+        if (cancelled) return;
 
         const mod = await import("@daily-co/daily-js");
         const Daily = mod.default;
-        const call = Daily.createFrame(containerRef.current, {
-          showLeaveButton: true,
-          showFullscreenButton: true,
-          iframeStyle: {
-            width: "100%",
-            height: "100%",
-            border: "0",
-            borderRadius: "16px",
-          },
-        });
+        const call = Daily.createCallObject();
         callRef.current = call;
-        // Daily Prebuilt may need to show its permission/prejoin UI before join resolves.
-        // Do not keep our loading layer over that UI or the user cannot interact with it.
-        setJoining(false);
-        call.on("left-meeting", () => {
-          callRef.current = null;
-          try { call.destroy(); } catch {}
-          setOpen(false);
+        const sync = () => { if (!cancelled) syncParticipants(call); };
+
+        call.on("participant-joined", sync);
+        call.on("participant-updated", sync);
+        call.on("participant-left", sync);
+        call.on("joined-meeting", () => {
+          if (cancelled) return;
+          syncParticipants(call);
+          setJoined(true);
           setJoining(false);
+        });
+        call.on("camera-error", () => {
+          if (!cancelled) setError("Camera permission was blocked or the camera is unavailable.");
         });
         call.on("error", (event) => {
           console.error("Daily video error", event);
-          setError("Camera connection failed. Check browser camera/microphone permissions and try again.");
+          if (!cancelled) setError("Video connection failed. Please try again.");
         });
+        call.on("left-meeting", () => {
+          if (callRef.current === call) callRef.current = null;
+          try { call.destroy(); } catch {}
+          if (!cancelled) {
+            setParticipants({});
+            setJoined(false);
+            setJoining(false);
+            setOpen(false);
+          }
+        });
+
         await call.join({ url: session.url, token: session.token });
+        if (!cancelled) {
+          syncParticipants(call);
+          setJoined(true);
+          setJoining(false);
+        }
       } catch (err) {
+        const call = callRef.current;
+        callRef.current = null;
+        if (call) {
+          try { call.destroy(); } catch {}
+        }
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Video could not start.");
+          setParticipants({});
+          setJoined(false);
+          setJoining(false);
           setOpen(false);
         }
-      } finally {
-        if (!cancelled) setJoining(false);
       }
     })();
 
     return () => { cancelled = true; };
-  }, [open, roomId]);
+  }, [open, roomId, canUseVideo]);
 
-  if (!open) return <div className="video-launch"><button className="btn btn-secondary" onClick={() => setOpen(true)}><Camera size={17}/>Turn camera on</button>{error&&<span className="text-xs text-[var(--red)]">{error}</span>}</div>;
+  useEffect(() => {
+    if (!canUseVideo && open) void stopVideo();
+  }, [canUseVideo, open]);
+
+  if (!canUseVideo) return null;
+
+  if (!open) return <div className="video-launch"><button className="btn btn-secondary" onClick={() => setOpen(true)}><Camera size={17}/>Start video</button>{error&&<span className="text-xs text-[var(--red)]">{error}</span>}</div>;
 
   return <section className="video-panel panel">
-    <div className="video-panel-head"><div><p className="eyebrow">OPTIONAL VIDEO</p><div className="font-bold mt-1">Stay present without making video mandatory.</div></div><button className="icon-btn" aria-label="Close video" onClick={stopVideo}><X size={17}/></button></div>
-    <div className="video-frame" ref={containerRef}>{joining&&<div className="video-loading"><Loader2 className="animate-spin" size={22}/><span>Connecting camera and microphone…</span></div>}</div>
-    <div className="video-panel-foot"><span className="text-xs muted">Video can disconnect without affecting timers, goals, or the shared room.</span><button className="btn btn-ghost btn-small" onClick={stopVideo}><CameraOff size={15}/>Leave video</button></div>
+    <div className="video-panel-head"><div><p className="eyebrow">OPTIONAL VIDEO</p><div className="font-bold mt-1">Quiet accountability, without leaving your focus room.</div></div>{joined&&<div className="video-presence"><span className="status-dot"/>{visibleParticipants.length} {visibleParticipants.length===1?"person":"people"}</div>}</div>
+    {joining ? <div className="video-loading"><Loader2 className="animate-spin" size={22}/><span>Connecting camera and microphone…</span></div> : <div className={`video-grid ${visibleParticipants.length<=1?"single":"multi"}`}>{visibleParticipants.map(participant=><ParticipantTile key={participant.session_id} participant={participant}/>)}</div>}
+    <div className="video-controls">
+      <button className={`video-control ${cameraOn?"active":""}`} onClick={toggleCamera} disabled={!joined}>{cameraOn?<Video size={18}/>:<VideoOff size={18}/>}<span>{cameraOn?"Camera on":"Camera off"}</span></button>
+      <button className={`video-control ${micOn?"active":""}`} onClick={toggleMic} disabled={!joined}>{micOn?<Mic size={18}/>:<MicOff size={18}/>}<span>{micOn?"Mic on":"Mic off"}</span></button>
+      <button className="video-control leave" onClick={stopVideo}><PhoneOff size={18}/><span>Leave video</span></button>
+    </div>
+    {error&&<div className="video-error">{error}</div>}
   </section>;
 }
