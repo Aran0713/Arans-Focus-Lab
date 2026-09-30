@@ -61,11 +61,18 @@ export function VideoPanel({ roomId }: { roomId: string }) {
           },
         });
         callRef.current = call;
+        // Daily Prebuilt may need to show its permission/prejoin UI before join resolves.
+        // Do not keep our loading layer over that UI or the user cannot interact with it.
+        setJoining(false);
         call.on("left-meeting", () => {
           callRef.current = null;
           try { call.destroy(); } catch {}
           setOpen(false);
           setJoining(false);
+        });
+        call.on("error", (event) => {
+          console.error("Daily video error", event);
+          setError("Camera connection failed. Check browser camera/microphone permissions and try again.");
         });
         await call.join({ url: session.url, token: session.token });
       } catch (err) {
