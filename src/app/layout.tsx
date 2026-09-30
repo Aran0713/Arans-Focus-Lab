@@ -3,12 +3,12 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: { default: "Aran’s Focus Lab", template: "%s · Aran’s Focus Lab" },
-  description: "A calm, private focus and accountability space for real work, honest breaks, and one focus partner.",
+  description: "A calm, private focus and accountability space for honest work, intentional breaks, trusted partners, and shared sessions.",
   applicationName: "Aran’s Focus Lab",
   icons: {
-    icon: [{ url: "/icon.svg?v=4", type: "image/svg+xml" }],
-    shortcut: "/icon.svg?v=4",
-    apple: "/icon.svg?v=4",
+    icon: [{ url: "/icon.svg?v=5", type: "image/svg+xml" }],
+    shortcut: "/icon.svg?v=5",
+    apple: "/icon.svg?v=5",
   },
 };
 
