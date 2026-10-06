@@ -352,8 +352,7 @@ function SharedFocusWorkspace({ session, room, onFinished }: { session: FocusSes
   const { user, command, busy, serverNow } = useLab();
   const [now, setNow] = useState(serverNow());
   const [showVideo, setShowVideo] = useState(true);
-  const [showGoals, setShowGoals] = useState(true);
-  const [showChat, setShowChat] = useState(true);
+  const [showSidebar, setShowSidebar] = useState(true);
   const [chatUnread, setChatUnread] = useState(0);
   const [layoutLoaded, setLayoutLoaded] = useState(false);
 
@@ -364,12 +363,12 @@ function SharedFocusWorkspace({ session, room, onFinished }: { session: FocusSes
 
   useEffect(() => {
     try {
-      const saved = window.localStorage.getItem("focus-room-layout:v1");
+      const saved = window.localStorage.getItem("focus-room-layout:v2") ?? window.localStorage.getItem("focus-room-layout:v1");
       if (saved) {
-        const parsed = JSON.parse(saved) as { video?: boolean; goals?: boolean; chat?: boolean };
+        const parsed = JSON.parse(saved) as { video?: boolean; sidebar?: boolean; goals?: boolean; chat?: boolean };
         if (typeof parsed.video === "boolean") setShowVideo(parsed.video);
-        if (typeof parsed.goals === "boolean") setShowGoals(parsed.goals);
-        if (typeof parsed.chat === "boolean") setShowChat(parsed.chat);
+        if (typeof parsed.sidebar === "boolean") setShowSidebar(parsed.sidebar);
+        else if (typeof parsed.chat === "boolean" || typeof parsed.goals === "boolean") setShowSidebar(parsed.chat !== false || parsed.goals !== false);
       }
     } catch {}
     setLayoutLoaded(true);
@@ -378,9 +377,10 @@ function SharedFocusWorkspace({ session, room, onFinished }: { session: FocusSes
   useEffect(() => {
     if (!layoutLoaded) return;
     try {
-      window.localStorage.setItem("focus-room-layout:v1", JSON.stringify({ video: showVideo, goals: showGoals, chat: showChat }));
+      window.localStorage.setItem("focus-room-layout:v2", JSON.stringify({ video: showVideo, sidebar: showSidebar }));
+      window.localStorage.removeItem("focus-room-layout:v1");
     } catch {}
-  }, [layoutLoaded, showChat, showGoals, showVideo]);
+  }, [layoutLoaded, showSidebar, showVideo]);
 
   const totals = useMemo(() => sessionTotals(session, now), [session, now]);
   const isBreak = session.status === "break";
@@ -405,7 +405,7 @@ function SharedFocusWorkspace({ session, room, onFinished }: { session: FocusSes
   }
 
   return (
-    <section className={`focus-workspace-shell ${showChat ? "" : "chat-closed"}`}>
+    <section className={`focus-workspace-shell ${showSidebar ? "" : "panel-closed"}`}>
       <header className="focus-workspace-head">
         <div className="focus-workspace-title">
           <p className="eyebrow">SHARED FOCUS</p>
@@ -428,8 +428,7 @@ function SharedFocusWorkspace({ session, room, onFinished }: { session: FocusSes
           <div className="workspace-layout-popover">
             <div className="workspace-layout-label">SHOW IN WORKSPACE</div>
             <button type="button" className={showVideo ? "active" : ""} onClick={() => setShowVideo((value) => !value)}><VideoIcon size={15} /><span>Video</span><b>{showVideo ? "On" : "Off"}</b></button>
-            <button type="button" className={showGoals ? "active" : ""} onClick={() => setShowGoals((value) => !value)}><Target size={15} /><span>Goals</span><b>{showGoals ? "On" : "Off"}</b></button>
-            <button type="button" className={showChat ? "active" : ""} onClick={() => setShowChat((value) => !value)}><MessageCircle size={15} /><span>Chat</span><b>{showChat ? "On" : chatUnread ? `${chatUnread} new` : "Off"}</b></button>
+            <button type="button" className={showSidebar ? "active" : ""} onClick={() => setShowSidebar((value) => !value)}><Target size={15} /><span>Tasks / Chat</span><b>{showSidebar ? "On" : chatUnread ? `${chatUnread} new` : "Off"}</b></button>
             <div className="workspace-layout-divider" />
             <button type="button" className="workspace-layout-action" disabled={busy} onClick={leaveRoom}><LogOut size={15} /><span>Leave shared room</span></button>
             {isCreator && <button type="button" className="workspace-layout-action danger" disabled={busy} onClick={() => command("cancel_room", { room_id: room.id })}><X size={15} /><span>End room for everyone</span></button>}
@@ -439,45 +438,43 @@ function SharedFocusWorkspace({ session, room, onFinished }: { session: FocusSes
 
       <div className="focus-workspace-body">
         <div className="focus-workspace-main">
-          {showGoals ? (
-            <section className="workspace-goals">
-              <div className="workspace-section-head">
-                <div><p className="eyebrow">TODAY’S GOALS</p><h2>Keep the plan visible while you work.</h2></div>
-                <button type="button" className="workspace-section-hide" onClick={() => setShowGoals(false)}>Hide</button>
-              </div>
-              <div className="workspace-goal-grid">
+          <div className="workspace-video-wrap">
+            <VideoPanel roomId={room.id} embedded collapsed={!showVideo} onExpand={() => setShowVideo(true)} />
+          </div>
+        </div>
+
+        <aside className={`focus-workspace-chat ${showSidebar ? "" : "is-hidden"}`}>
+          <RoomChat
+            room={room}
+            visible={showSidebar}
+            onClose={() => setShowSidebar(false)}
+            onUnreadChange={setChatUnread}
+            tasksSlot={
+              <div className="sidebar-task-content">
+                <div className="sidebar-task-intro">
+                  <p className="eyebrow">WHAT WE’RE WORKING ON</p>
+                  <span>Keep the next actions visible. Check them off as you go.</span>
+                </div>
                 {presentMembers.map((member) => member.user_id === session.user_id ? (
-                  <div className="workspace-goal-person mine" key={member.user_id}>
+                  <div className="sidebar-task-person mine" key={member.user_id}>
                     <div className="workspace-goal-person-head"><span><b>You</b><small>{session.title}</small></span><span className={`room-status ${session.status}`}>{sessionStatus(member)}</span></div>
                     <EditableGoals session={session} compact />
                   </div>
                 ) : (
-                  <div className={`workspace-goal-person ${member.session?.status === "finished" ? "finished" : ""}`} key={member.user_id}>
+                  <div className={`sidebar-task-person ${member.session?.status === "finished" ? "finished" : ""}`} key={member.user_id}>
                     <div className="workspace-goal-person-head"><span><b>{member.name}</b><small>{member.session?.title || member.title || "Shared focus"}</small></span><span className={`room-status ${member.session?.status ?? "waiting"}`}>{sessionStatus(member)}</span></div>
                     <ReadOnlyGoals goals={member.session?.goals ?? []} />
                   </div>
                 ))}
               </div>
-            </section>
-          ) : (
-            <button type="button" className="workspace-reopen-bar" onClick={() => setShowGoals(true)}><Target size={17} /><span>Goals hidden</span><b>Show goals</b></button>
-          )}
-
-          <div className="workspace-video-wrap">
-            <div className="workspace-video-label"><span><VideoIcon size={15} />Accountability video</span><button type="button" onClick={() => setShowVideo((value) => !value)}>{showVideo ? "Hide" : "Show"}</button></div>
-            <VideoPanel roomId={room.id} embedded collapsed={!showVideo} onExpand={() => setShowVideo(true)} />
-          </div>
-        </div>
-
-        <aside className={`focus-workspace-chat ${showChat ? "" : "is-hidden"}`}>
-          <RoomChat room={room} visible={showChat} onClose={() => setShowChat(false)} onUnreadChange={setChatUnread} />
+            }
+          />
         </aside>
       </div>
 
       <footer className="focus-workspace-controls">
         <div className="workspace-quick-actions">
-          {!showChat && <button type="button" onClick={() => setShowChat(true)}><MessageCircle size={17} />Chat{chatUnread > 0 && <span>{chatUnread > 9 ? "9+" : chatUnread}</span>}</button>}
-          {!showGoals && <button type="button" onClick={() => setShowGoals(true)}><Target size={17} />Goals</button>}
+          {!showSidebar && <button type="button" onClick={() => setShowSidebar(true)}><Target size={17} />Tasks / Chat{chatUnread > 0 && <span>{chatUnread > 9 ? "9+" : chatUnread}</span>}</button>}
           {!showVideo && <button type="button" onClick={() => setShowVideo(true)}><VideoIcon size={17} />Video</button>}
         </div>
         <div className={`workspace-main-timer ${isBreak ? "break" : ""}`}>
