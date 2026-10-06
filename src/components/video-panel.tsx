@@ -245,7 +245,6 @@ export function VideoPanel({
             surfaceSwitching: "include",
             systemAudio: "include",
           },
-          screenVideoSendSettings: "quality-optimized",
         });
       }
       syncParticipants(call);
