@@ -41,6 +41,8 @@ export type RoomMemberSession = {
   started_at: string;
   finished_at: string | null;
   interval_started_at: string | null;
+  focus_seconds: number;
+  break_seconds: number;
   goals: SharedGoal[];
 };
 export type RoomMember = {
@@ -63,6 +65,26 @@ export type FocusRoom = {
   started_at: string | null;
   created_at: string;
   members: RoomMember[];
+};
+
+export type RoomMessage = {
+  id: string;
+  room_id: string;
+  sender_id: string;
+  body: string;
+  created_at: string;
+};
+
+export type RoomMessageAttachment = {
+  id: string;
+  message_id: string;
+  room_id: string;
+  uploader_id: string;
+  storage_path: string;
+  file_name: string;
+  mime_type: string;
+  size_bytes: number;
+  created_at: string;
 };
 
 export type ScheduleMember = { id: string; name: string; rsvp: boolean };

@@ -9,18 +9,23 @@ import {
   Coffee,
   Flag,
   GripVertical,
+  LayoutGrid,
   LogOut,
+  MessageCircle,
   Pencil,
   Play,
   Plus,
   RotateCcw,
   Save,
+  Target,
   Trash2,
   Users,
+  Video as VideoIcon,
   X,
 } from "lucide-react";
 import { useLab } from "@/components/lab-provider";
 import { VideoPanel } from "@/components/video-panel";
+import { RoomChat } from "@/components/room-chat";
 import { formatClock, formatDuration, intervalDuration, sessionTotals } from "@/lib/metrics";
 import type { FocusRoom, FocusSession, RoomMember, ScheduledSession, SharedGoal } from "@/lib/types";
 
@@ -333,11 +338,166 @@ function SessionSummary({ session, onDone, onAnother, onRejoin }: { session: Foc
   );
 }
 
+function memberFocusMs(member: RoomMember, now: number) {
+  const session = member.session;
+  if (!session) return 0;
+  let ms = Math.max(0, Number(session.focus_seconds ?? 0)) * 1000;
+  if (session.status === "focusing" && session.interval_started_at) {
+    ms += Math.max(0, now - new Date(session.interval_started_at).getTime());
+  }
+  return ms;
+}
+
+function SharedFocusWorkspace({ session, room, onFinished }: { session: FocusSession; room: FocusRoom; onFinished: (id: string) => void }) {
+  const { user, command, busy, serverNow } = useLab();
+  const [now, setNow] = useState(serverNow());
+  const [showVideo, setShowVideo] = useState(true);
+  const [showSidebar, setShowSidebar] = useState(true);
+  const [chatUnread, setChatUnread] = useState(0);
+  const [layoutLoaded, setLayoutLoaded] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(serverNow()), 1000);
+    return () => clearInterval(timer);
+  }, [serverNow]);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("focus-room-layout:v2") ?? window.localStorage.getItem("focus-room-layout:v1");
+      if (saved) {
+        const parsed = JSON.parse(saved) as { video?: boolean; sidebar?: boolean; goals?: boolean; chat?: boolean };
+        if (typeof parsed.video === "boolean") setShowVideo(parsed.video);
+        if (typeof parsed.sidebar === "boolean") setShowSidebar(parsed.sidebar);
+        else if (typeof parsed.chat === "boolean" || typeof parsed.goals === "boolean") setShowSidebar(parsed.chat !== false || parsed.goals !== false);
+      }
+    } catch {}
+    setLayoutLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!layoutLoaded) return;
+    try {
+      window.localStorage.setItem("focus-room-layout:v2", JSON.stringify({ video: showVideo, sidebar: showSidebar }));
+      window.localStorage.removeItem("focus-room-layout:v1");
+    } catch {}
+  }, [layoutLoaded, showSidebar, showVideo]);
+
+  const totals = useMemo(() => sessionTotals(session, now), [session, now]);
+  const isBreak = session.status === "break";
+  const activeInterval = [...(session.intervals ?? [])].reverse().find((i) => !i.ended_at);
+  const currentIntervalMs = activeInterval ? intervalDuration(activeInterval, now) : 0;
+  const isPomodoro = session.mode === "timed" && session.duration === 25 * 60;
+  const remaining = session.duration ? Math.max(0, session.duration * 1000 - totals.focusMs) : null;
+  const pomodoroRemaining = isPomodoro && !isBreak ? Math.max(0, 25 * 60 * 1000 - currentIntervalMs) : null;
+  const displayed = isBreak ? currentIntervalMs : isPomodoro && pomodoroRemaining !== null ? pomodoroRemaining : session.mode === "timed" && remaining !== null ? remaining : totals.focusMs;
+  const presentMembers = room.members.filter((member) => member.is_present);
+  const otherNames = presentMembers.filter((member) => member.user_id !== user?.id).map((member) => member.name);
+  const roomTitle = otherNames.length ? `Focus with ${otherNames.join(", ")}` : "Shared focus";
+  const isCreator = room.created_by === user?.id;
+
+  async function finish() {
+    await command("finish", { session_id: session.id });
+    onFinished(session.id);
+  }
+
+  async function leaveRoom() {
+    await command("leave_room", { room_id: room.id });
+  }
+
+  return (
+    <section className={`focus-workspace-shell ${showSidebar ? "" : "panel-closed"}`}>
+      <header className="focus-workspace-head">
+        <div className="focus-workspace-title">
+          <p className="eyebrow">SHARED FOCUS</p>
+          <h1>{roomTitle}</h1>
+          <div><span className="status-dot" />{presentMembers.length} {presentMembers.length === 1 ? "person" : "people"} here · Your focus: {session.title}</div>
+        </div>
+
+        <div className="workspace-member-timers">
+          {presentMembers.map((member) => (
+            <div className={`workspace-member-timer ${member.user_id === user?.id ? "mine" : ""}`} key={member.user_id}>
+              <span className="workspace-member-avatar">{member.user_id === user?.id ? "You" : member.name.split(/\s+/).map((part) => part[0]).slice(0,2).join("").toUpperCase()}</span>
+              <span><b>{member.user_id === user?.id ? "You" : member.name}</b><small className={member.session?.status === "break" ? "break" : member.session?.status === "finished" ? "finished" : ""}>{sessionStatus(member)}</small></span>
+              <strong>{formatClock(memberFocusMs(member, now))}</strong>
+            </div>
+          ))}
+        </div>
+
+        <details className="workspace-layout-menu">
+          <summary><LayoutGrid size={16} />Layout</summary>
+          <div className="workspace-layout-popover">
+            <div className="workspace-layout-label">SHOW IN WORKSPACE</div>
+            <button type="button" className={showVideo ? "active" : ""} onClick={() => setShowVideo((value) => !value)}><VideoIcon size={15} /><span>Video</span><b>{showVideo ? "On" : "Off"}</b></button>
+            <button type="button" className={showSidebar ? "active" : ""} onClick={() => setShowSidebar((value) => !value)}><Target size={15} /><span>Tasks / Chat</span><b>{showSidebar ? "On" : chatUnread ? `${chatUnread} new` : "Off"}</b></button>
+            <div className="workspace-layout-divider" />
+            <button type="button" className="workspace-layout-action" disabled={busy} onClick={leaveRoom}><LogOut size={15} /><span>Leave shared room</span></button>
+            {isCreator && <button type="button" className="workspace-layout-action danger" disabled={busy} onClick={() => command("cancel_room", { room_id: room.id })}><X size={15} /><span>End room for everyone</span></button>}
+          </div>
+        </details>
+      </header>
+
+      <div className="focus-workspace-body">
+        <div className="focus-workspace-main">
+          <div className="workspace-video-wrap">
+            <VideoPanel roomId={room.id} embedded collapsed={!showVideo} onExpand={() => setShowVideo(true)} />
+          </div>
+        </div>
+
+        <aside className={`focus-workspace-chat ${showSidebar ? "" : "is-hidden"}`}>
+          <RoomChat
+            room={room}
+            visible={showSidebar}
+            onClose={() => setShowSidebar(false)}
+            onUnreadChange={setChatUnread}
+            tasksSlot={
+              <div className="sidebar-task-content">
+                <div className="sidebar-task-intro">
+                  <p className="eyebrow">WHAT WE’RE WORKING ON</p>
+                  <span>Keep the next actions visible. Check them off as you go.</span>
+                </div>
+                {presentMembers.map((member) => member.user_id === session.user_id ? (
+                  <div className="sidebar-task-person mine" key={member.user_id}>
+                    <div className="workspace-goal-person-head"><span><b>You</b><small>{session.title}</small></span><span className={`room-status ${session.status}`}>{sessionStatus(member)}</span></div>
+                    <EditableGoals session={session} compact />
+                  </div>
+                ) : (
+                  <div className={`sidebar-task-person ${member.session?.status === "finished" ? "finished" : ""}`} key={member.user_id}>
+                    <div className="workspace-goal-person-head"><span><b>{member.name}</b><small>{member.session?.title || member.title || "Shared focus"}</small></span><span className={`room-status ${member.session?.status ?? "waiting"}`}>{sessionStatus(member)}</span></div>
+                    <ReadOnlyGoals goals={member.session?.goals ?? []} />
+                  </div>
+                ))}
+              </div>
+            }
+          />
+        </aside>
+      </div>
+
+      <footer className="focus-workspace-controls">
+        <div className="workspace-quick-actions">
+          {!showSidebar && <button type="button" onClick={() => setShowSidebar(true)}><Target size={17} />Tasks / Chat{chatUnread > 0 && <span>{chatUnread > 9 ? "9+" : chatUnread}</span>}</button>}
+          {!showVideo && <button type="button" onClick={() => setShowVideo(true)}><VideoIcon size={17} />Video</button>}
+        </div>
+        <div className={`workspace-main-timer ${isBreak ? "break" : ""}`}>
+          <strong>{formatClock(displayed)}</strong>
+          <span>{isBreak ? `Break timer · Focused ${formatClock(totals.focusMs)}` : isPomodoro ? "Pomodoro focus" : "Focused time"}</span>
+        </div>
+        <div className="workspace-timer-actions">
+          {isBreak ? <button className="btn btn-primary" disabled={busy} onClick={() => command("resume", { session_id: session.id })}><RotateCcw size={16} />Resume</button> : <button className="btn btn-secondary" disabled={busy} onClick={() => command("break", { session_id: session.id })}><Coffee size={16} />Break</button>}
+          <button className="btn btn-ghost workspace-finish" disabled={busy} onClick={finish}><Flag size={16} />Finish</button>
+        </div>
+      </footer>
+    </section>
+  );
+}
+
 function ActiveTimer({ session, onFinished }: { session: FocusSession; onFinished: (id: string) => void }) {
-  const { state, user, command, busy, serverNow } = useLab();
+  const { state, command, busy, serverNow } = useLab();
   const [now, setNow] = useState(serverNow());
   useEffect(() => { const timer = window.setInterval(() => setNow(serverNow()), 1000); return () => clearInterval(timer); }, [serverNow]);
+  const room = session.room_id && state?.room?.id === session.room_id ? state.room : null;
   const totals = useMemo(() => sessionTotals(session, now), [session, now]);
+
+  if (room) return <SharedFocusWorkspace session={session} room={room} onFinished={onFinished} />;
   const isBreak = session.status === "break";
   const activeInterval = [...(session.intervals ?? [])].reverse().find((i) => !i.ended_at);
   const currentIntervalMs = activeInterval ? intervalDuration(activeInterval, now) : 0;
@@ -347,11 +507,8 @@ function ActiveTimer({ session, onFinished }: { session: FocusSession; onFinishe
   const displayed = isBreak ? totals.focusMs : isPomodoro && pomodoroRemaining !== null ? pomodoroRemaining : session.mode === "timed" && remaining !== null ? remaining : totals.focusMs;
   const breakMs = isBreak && activeInterval?.kind === "break" ? currentIntervalMs : 0;
   const pomodoroBreakRemaining = isPomodoro && isBreak ? Math.max(0, 5 * 60 * 1000 - breakMs) : null;
-  const room = session.room_id && state?.room?.id === session.room_id ? state.room : null;
-  const isCreator = room?.created_by === user?.id;
 
   async function finish() { await command("finish", { session_id: session.id }); onFinished(session.id); }
-  async function leaveSharedRoom() { if (room) await command("leave_room", { room_id: room.id }); }
 
   return <>
     <section className={`panel timer-screen ${isBreak ? "break-mode" : ""}`}>
@@ -359,11 +516,7 @@ function ActiveTimer({ session, onFinished }: { session: FocusSession; onFinishe
       <div><div className="timer-clock">{formatClock(displayed)}</div>{isBreak ? <div className="break-timer-card mt-6"><div className="text-xs font-extrabold tracking-[.18em] text-[var(--gold)]">CURRENT BREAK</div><div className="break-clock">{formatClock(breakMs)}</div>{isPomodoro && <div className="text-sm muted mt-1">{pomodoroBreakRemaining === 0 ? "5-minute break complete — resume when ready" : `${formatClock(pomodoroBreakRemaining ?? 0)} until your 5-minute break target`}</div>}</div> : isPomodoro ? <div className="muted mt-4">{pomodoroRemaining === 0 ? "25-minute round complete — take a 5-minute break" : "25-minute focus round"}</div> : session.mode === "timed" && <div className="muted mt-4">{remaining === 0 ? "Focus target reached — finish when you’re ready" : "focused time remaining"}</div>}<div className="muted mt-3 text-sm">Actual focus {formatDuration(totals.focusMs, true)} · Total breaks {formatDuration(totals.breakMs, true)}</div></div>
       <div className="flex flex-wrap justify-center gap-3">{isBreak ? <button className="btn btn-primary" disabled={busy} onClick={() => command("resume", { session_id: session.id })}><RotateCcw size={16} />Resume Focus</button> : <button className="btn btn-secondary" disabled={busy} onClick={() => command("break", { session_id: session.id })}><Coffee size={16} />{isPomodoro && pomodoroRemaining === 0 ? "Start 5 min Break" : "Take Break"}</button>}<button className="btn btn-ghost" disabled={busy} onClick={finish}><Flag size={16} />Finish</button></div>
     </section>
-    {room ? <>
-      <SharedGoalsBoard room={room} session={session} />
-      <section className="panel p-5 mt-5"><div className="flex items-center justify-between gap-4 flex-wrap"><div><div className="font-bold">Need to switch plans?</div><div className="text-sm muted mt-1">Leave the shared room and your current timer keeps running as a solo session.</div></div><div className="flex gap-2 flex-wrap"><button className="btn btn-secondary" disabled={busy} onClick={leaveSharedRoom}><LogOut size={16} />Leave shared room</button>{isCreator && <button className="btn btn-ghost" disabled={busy} onClick={() => command("cancel_room", { room_id: room.id })}>End shared room for everyone</button>}</div></div></section>
-      <div className="mt-5"><VideoPanel roomId={room.id} /></div>
-    </> : <section className="panel p-6 mt-5"><p className="eyebrow">SESSION GOALS</p><h2 className="section-title mt-2">Adjust the plan while you work.</h2><EditableGoals session={session} /></section>}
+    <section className="panel p-6 mt-5"><p className="eyebrow">SESSION GOALS</p><h2 className="section-title mt-2">Adjust the plan while you work.</h2><EditableGoals session={session} /></section>
   </>;
 }
 
@@ -445,7 +598,7 @@ function FocusPageInner() {
   }
 
   const active = state.sessions.find((s) => s.status !== "finished");
-  if (active) return <main className="page"><div className="lab-container"><ActiveTimer session={active} onFinished={setFinishedId} /></div></main>;
+  if (active) return <main className={`page ${active.room_id ? "focus-room-page" : ""}`}><div className={`lab-container ${active.room_id ? "focus-workspace-container" : ""}`}><ActiveTimer session={active} onFinished={setFinishedId} /></div></main>;
   if (state.room?.status === "waiting") return <main className="page"><div className="lab-container"><WaitingRoom /></div></main>;
   if (state.room?.status === "active") return <main className="page"><div className="lab-container"><RoomObserver room={state.room} /></div></main>;
 
