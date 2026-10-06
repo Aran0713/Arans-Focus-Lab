@@ -497,10 +497,9 @@ function ActiveTimer({ session, onFinished }: { session: FocusSession; onFinishe
   const [now, setNow] = useState(serverNow());
   useEffect(() => { const timer = window.setInterval(() => setNow(serverNow()), 1000); return () => clearInterval(timer); }, [serverNow]);
   const room = session.room_id && state?.room?.id === session.room_id ? state.room : null;
+  const totals = useMemo(() => sessionTotals(session, now), [session, now]);
 
   if (room) return <SharedFocusWorkspace session={session} room={room} onFinished={onFinished} />;
-
-  const totals = useMemo(() => sessionTotals(session, now), [session, now]);
   const isBreak = session.status === "break";
   const activeInterval = [...(session.intervals ?? [])].reverse().find((i) => !i.ended_at);
   const currentIntervalMs = activeInterval ? intervalDuration(activeInterval, now) : 0;
