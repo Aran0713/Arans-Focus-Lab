@@ -480,7 +480,7 @@ function SharedFocusWorkspace({ session, room, onFinished }: { session: FocusSes
           {!showGoals && <button type="button" onClick={() => setShowGoals(true)}><Target size={17} />Goals</button>}
           {!showVideo && <button type="button" onClick={() => setShowVideo(true)}><VideoIcon size={17} />Video</button>}
         </div>
-        <div className="workspace-main-timer">
+        <div className={`workspace-main-timer ${isBreak ? "break" : ""}`}>
           <strong>{formatClock(displayed)}</strong>
           <span>{isBreak ? `Break timer · Focused ${formatClock(totals.focusMs)}` : isPomodoro ? "Pomodoro focus" : "Focused time"}</span>
         </div>
