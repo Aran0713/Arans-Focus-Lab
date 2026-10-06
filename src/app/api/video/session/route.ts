@@ -24,7 +24,7 @@ export async function POST(request: Request) {
   const { data, error: accessError } = await supabase.rpc("video_access", { room_id: body.roomId });
   if (accessError || !data) return jsonError(accessError?.message || "You do not have access to this room.", 403);
   const access = data as unknown as VideoAccess;
-  if (access.member_count < 2 || access.member_count > 4) return jsonError("This room cannot start video.", 403);
+  if (access.member_count < 2 || access.member_count > 6) return jsonError("This room cannot start video.", 403);
 
   const roomName = `focus-${body.roomId.replace(/-/g, "")}`;
   const headers = { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" };
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
         privacy: "private",
         properties: {
           exp: nowSeconds + 8 * 60 * 60,
-          max_participants: 4,
+          max_participants: 6,
           enable_people_ui: true,
           enable_prejoin_ui: true,
           enable_chat: false,
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
     const updated = await fetch(`${DAILY_API}/rooms/${roomName}`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ properties: { enable_screenshare: true } }),
+      body: JSON.stringify({ properties: { enable_screenshare: true, max_participants: 6 } }),
     });
     if (!updated.ok) {
       const detail = await updated.text();

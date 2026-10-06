@@ -42,7 +42,7 @@ export default function HomePage(){
   async function moveCommitment(targetId:string){if(!dragId||dragId===targetId)return;const from=commitments.findIndex(i=>i.id===dragId);const to=commitments.findIndex(i=>i.id===targetId);if(from<0||to<0)return;const next=[...commitments];const[moved]=next.splice(from,1);next.splice(to,0,moved);setDragId(null);await saveToday(next)}
   async function shiftCommitment(id:string,direction:-1|1){const from=commitments.findIndex(i=>i.id===id);const to=from+direction;if(from<0||to<0||to>=commitments.length)return;const next=[...commitments];[next[from],next[to]]=[next[to],next[from]];await saveToday(next)}
 
-  function togglePartner(id:string){setSelectedPartners(current=>current.includes(id)?current.filter(v=>v!==id):current.length<3?[...current,id]:current)}
+  function togglePartner(id:string){setSelectedPartners(current=>current.includes(id)?current.filter(v=>v!==id):current.length<5?[...current,id]:current)}
   async function schedule(e:FormEvent){
     e.preventDefault();
     if(!scheduledTitle.trim()||!scheduledDate||!scheduledTime||selectedPartners.length===0)return;
