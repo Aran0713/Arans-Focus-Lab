@@ -50,7 +50,7 @@ function PartnerPicker({ selected, onToggle }: { selected: string[]; onToggle: (
   const partners = state?.partners ?? [];
   return (
     <div>
-      <div className="text-xs muted font-bold mb-2">Invite partners · up to 3</div>
+      <div className="text-xs muted font-bold mb-2">Invite partners · up to 5</div>
       <div className="partner-picker">
         {partners.map((partner) => (
           <button type="button" key={partner.id} className={selected.includes(partner.id) ? "selected" : ""} onClick={() => onToggle(partner.id)}>
@@ -91,7 +91,7 @@ function SessionSetup({ shared = false, schedule }: { shared?: boolean; schedule
   const allScheduledCommitted = schedule ? schedule.members.length > 0 && schedule.rsvps.length === schedule.members.length : true;
 
   function togglePartner(id: string) {
-    setSelectedPartners((current) => current.includes(id) ? current.filter((v) => v !== id) : current.length < 3 ? [...current, id] : current);
+    setSelectedPartners((current) => current.includes(id) ? current.filter((v) => v !== id) : current.length < 5 ? [...current, id] : current);
   }
 
   async function submit(e: FormEvent) {
