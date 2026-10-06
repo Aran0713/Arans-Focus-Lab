@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Camera, Loader2, Mic, MicOff, PhoneOff, Video, VideoOff } from "lucide-react";
+import { Camera, Expand, Loader2, Mic, MicOff, MonitorUp, PhoneOff, ScreenShareOff, Video, VideoOff } from "lucide-react";
 import type { DailyCall, DailyParticipant } from "@daily-co/daily-js";
 import { useLab } from "@/components/lab-provider";
 
-function ParticipantTile({ participant }: { participant: DailyParticipant }) {
+function ParticipantTile({ participant, compact = false }: { participant: DailyParticipant; compact?: boolean }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [, forceTrackRefresh] = useState(0);
@@ -75,10 +75,83 @@ function ParticipantTile({ participant }: { participant: DailyParticipant }) {
     };
   }, [audioTrack, participant.local]);
 
-  return <div className={`video-tile ${participant.local ? "local" : "remote"}`}>
+  return <div className={`video-tile ${compact ? "compact" : ""} ${participant.local ? "local" : "remote"}`}>
     {videoOn ? <video ref={videoRef} autoPlay playsInline muted /> : <div className="video-placeholder"><div className="video-avatar">{(participant.user_name || "?").trim().charAt(0).toUpperCase()}</div><span>{videoState.state === "loading" ? "Connecting video…" : "Camera off"}</span></div>}
     {!participant.local && <audio ref={audioRef} autoPlay playsInline />}
     <div className="video-name"><span>{participant.local ? "You" : (participant.user_name || "Focus partner")}</span>{!audioOn && <MicOff size={13}/>}</div>
+  </div>;
+}
+
+
+function ScreenShareStage({
+  participant,
+  participants,
+}: {
+  participant: DailyParticipant;
+  participants: DailyParticipant[];
+}) {
+  const screenRef = useRef<HTMLVideoElement | null>(null);
+  const screenAudioRef = useRef<HTMLAudioElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const screenVideoState = participant.tracks.screenVideo;
+  const screenAudioState = participant.tracks.screenAudio;
+  const screenTrack = screenVideoState.track ?? screenVideoState.persistentTrack ?? null;
+  const screenAudioTrack = screenAudioState.track ?? screenAudioState.persistentTrack ?? null;
+  const sharerName = participant.local ? "You" : (participant.user_name || "Focus partner");
+
+  useEffect(() => {
+    const element = screenRef.current;
+    if (!element || !screenTrack || screenTrack.readyState === "ended") return;
+    const stream = new MediaStream([screenTrack]);
+    element.srcObject = stream;
+    element.autoplay = true;
+    element.muted = true;
+    element.playsInline = true;
+    const play = () => void element.play().catch(() => undefined);
+    element.addEventListener("loadedmetadata", play);
+    element.addEventListener("canplay", play);
+    screenTrack.addEventListener("unmute", play);
+    play();
+    return () => {
+      element.removeEventListener("loadedmetadata", play);
+      element.removeEventListener("canplay", play);
+      screenTrack.removeEventListener("unmute", play);
+      if (element.srcObject === stream) element.srcObject = null;
+    };
+  }, [screenTrack]);
+
+  useEffect(() => {
+    const element = screenAudioRef.current;
+    if (!element || participant.local || !screenAudioTrack || screenAudioTrack.readyState === "ended") return;
+    const stream = new MediaStream([screenAudioTrack]);
+    element.srcObject = stream;
+    const play = () => void element.play().catch(() => undefined);
+    element.addEventListener("loadedmetadata", play);
+    screenAudioTrack.addEventListener("unmute", play);
+    play();
+    return () => {
+      element.removeEventListener("loadedmetadata", play);
+      screenAudioTrack.removeEventListener("unmute", play);
+      if (element.srcObject === stream) element.srcObject = null;
+    };
+  }, [participant.local, screenAudioTrack]);
+
+  async function fullscreen() {
+    try {
+      await stageRef.current?.requestFullscreen();
+    } catch {}
+  }
+
+  return <div className="screen-share-stage" ref={stageRef}>
+    <div className="screen-share-status">
+      <span className="screen-share-live"><span className="status-dot" />{participant.local ? "You’re sharing your screen" : `${sharerName} is sharing`}</span>
+      <button type="button" onClick={fullscreen}><Expand size={14}/>Full screen</button>
+    </div>
+    {screenTrack ? <video ref={screenRef} className="screen-share-video" autoPlay playsInline muted /> : <div className="screen-share-loading"><Loader2 className="animate-spin" size={20}/>Connecting screen share…</div>}
+    {!participant.local && <audio ref={screenAudioRef} autoPlay playsInline />}
+    <div className="screen-share-filmstrip">
+      {participants.map((person) => <ParticipantTile key={person.session_id} participant={person} compact />)}
+    </div>
   </div>;
 }
 
@@ -99,13 +172,21 @@ export function VideoPanel({
   const [joined, setJoined] = useState(false);
   const [error, setError] = useState("");
   const [participants, setParticipants] = useState<Record<string, DailyParticipant>>({});
+  const [screenShareSupported, setScreenShareSupported] = useState(true);
+  const [screenShareBusy, setScreenShareBusy] = useState(false);
   const callRef = useRef<DailyCall | null>(null);
   const canUseVideo = state?.room?.id === roomId && state.room.status === "active";
 
   const visibleParticipants = useMemo(() => Object.values(participants).filter(Boolean), [participants]);
   const localParticipant = visibleParticipants.find(participant => participant.local);
+  const screenSharer = visibleParticipants.find(participant => {
+    const track = participant.tracks.screenVideo;
+    return Boolean(track.track ?? track.persistentTrack) && (track.state === "playable" || track.state === "loading");
+  });
   const cameraOn = localParticipant?.tracks.video.state === "playable";
   const micOn = localParticipant?.tracks.audio.state === "playable";
+  const localScreenSharing = Boolean(screenSharer?.local);
+  const remoteScreenSharing = Boolean(screenSharer && !screenSharer.local);
 
   function syncParticipants(call: DailyCall) {
     setParticipants({ ...call.participants() });
@@ -146,6 +227,38 @@ export function VideoPanel({
     }
   }
 
+
+  async function toggleScreenShare() {
+    const call = callRef.current;
+    if (!call || !joined || screenShareBusy) return;
+    setScreenShareBusy(true);
+    setError("");
+    try {
+      if (localScreenSharing) {
+        await call.stopScreenShare();
+      } else if (!remoteScreenSharing) {
+        await call.startScreenShare({
+          displayMediaOptions: {
+            video: true,
+            audio: true,
+            selfBrowserSurface: "exclude",
+            surfaceSwitching: "include",
+            systemAudio: "include",
+          },
+          screenVideoSendSettings: "quality-optimized",
+        });
+      }
+      syncParticipants(call);
+    } catch (err) {
+      const name = err instanceof DOMException ? err.name : "";
+      if (name !== "NotAllowedError" && name !== "AbortError") {
+        setError("Screen sharing couldn’t start. Try sharing a browser tab or application window.");
+      }
+    } finally {
+      setScreenShareBusy(false);
+    }
+  }
+
   useEffect(() => () => {
     const call = callRef.current;
     callRef.current = null;
@@ -176,6 +289,7 @@ export function VideoPanel({
 
         const mod = await import("@daily-co/daily-js");
         const Daily = mod.default;
+        setScreenShareSupported(Boolean(Daily.supportedBrowser().supportsScreenShare));
         const call = Daily.createCallObject();
         callRef.current = call;
         const sync = () => { if (!cancelled) syncParticipants(call); };
@@ -185,6 +299,9 @@ export function VideoPanel({
         call.on("participant-left", sync);
         call.on("track-started", sync);
         call.on("track-stopped", sync);
+        call.on("local-screen-share-started", sync);
+        call.on("local-screen-share-stopped", sync);
+        call.on("local-screen-share-canceled", sync);
         call.on("joined-meeting", () => {
           if (cancelled) return;
           syncParticipants(call);
@@ -254,10 +371,19 @@ export function VideoPanel({
 
   return <section className={`video-panel panel ${embedded ? "video-panel-embedded" : ""}`}>
     {!embedded && <div className="video-panel-head"><div><p className="eyebrow">OPTIONAL VIDEO</p><div className="font-bold mt-1">Quiet accountability, without leaving your focus room.</div></div>{joined&&<div className="video-presence"><span className="status-dot"/>{visibleParticipants.length} {visibleParticipants.length===1?"person":"people"}</div>}</div>}
-    {joining ? <div className="video-loading"><Loader2 className="animate-spin" size={22}/><span>Connecting camera and microphone…</span></div> : <div className={`video-grid ${visibleParticipants.length<=1?"single":"multi"}`}>{visibleParticipants.map(participant=><ParticipantTile key={participant.session_id} participant={participant}/>)}</div>}
+    {joining ? <div className="video-loading"><Loader2 className="animate-spin" size={22}/><span>Connecting camera and microphone…</span></div> : screenSharer ? <ScreenShareStage participant={screenSharer} participants={visibleParticipants} /> : <div className={`video-grid ${visibleParticipants.length<=1?"single":"multi"}`}>{visibleParticipants.map(participant=><ParticipantTile key={participant.session_id} participant={participant}/>)}</div>}
     <div className="video-controls">
       <button className={`video-control ${cameraOn?"active":""}`} onClick={toggleCamera} disabled={!joined}>{cameraOn?<Video size={18}/>:<VideoOff size={18}/>}<span>{cameraOn?"Camera on":"Camera off"}</span></button>
       <button className={`video-control ${micOn?"active":""}`} onClick={toggleMic} disabled={!joined}>{micOn?<Mic size={18}/>:<MicOff size={18}/>}<span>{micOn?"Mic on":"Mic off"}</span></button>
+      <button
+        className={`video-control screen-share-control ${localScreenSharing ? "sharing" : ""}`}
+        onClick={toggleScreenShare}
+        disabled={!joined || !screenShareSupported || screenShareBusy || remoteScreenSharing}
+        title={!screenShareSupported ? "Screen sharing isn’t supported in this browser." : remoteScreenSharing ? `${screenSharer?.user_name || "Your focus partner"} is already sharing.` : undefined}
+      >
+        {screenShareBusy ? <Loader2 className="animate-spin" size={18}/> : localScreenSharing ? <ScreenShareOff size={18}/> : <MonitorUp size={18}/>}
+        <span>{localScreenSharing ? "Stop sharing" : remoteScreenSharing ? "Viewing share" : "Share screen"}</span>
+      </button>
       <button className="video-control leave" onClick={stopVideo}><PhoneOff size={18}/><span>Leave video</span></button>
     </div>
     {error&&<div className="video-error">{error}</div>}
