@@ -82,7 +82,17 @@ function ParticipantTile({ participant }: { participant: DailyParticipant }) {
   </div>;
 }
 
-export function VideoPanel({ roomId }: { roomId: string }) {
+export function VideoPanel({
+  roomId,
+  embedded = false,
+  collapsed = false,
+  onExpand,
+}: {
+  roomId: string;
+  embedded?: boolean;
+  collapsed?: boolean;
+  onExpand?: () => void;
+}) {
   const { state } = useLab();
   const [open, setOpen] = useState(false);
   const [joining, setJoining] = useState(false);
@@ -230,10 +240,20 @@ export function VideoPanel({ roomId }: { roomId: string }) {
 
   if (!canUseVideo) return null;
 
-  if (!open) return <div className="video-launch"><button className="btn btn-secondary" onClick={() => setOpen(true)}><Camera size={17}/>Start video</button>{error&&<span className="text-xs text-[var(--red)]">{error}</span>}</div>;
+  if (collapsed) {
+    return <div className="video-collapsed-bar">
+      <div><span className={`status-dot ${joined ? "" : "offline"}`}/><b>{joined ? "Video is still connected" : "Video panel hidden"}</b><span>{joined ? (cameraOn ? "Camera on" : "Camera off") : "Open it whenever you want."}</span></div>
+      <div className="flex gap-2 flex-wrap">
+        <button className="btn btn-secondary btn-small" type="button" onClick={onExpand}>Show video</button>
+        {joined && <button className="btn btn-ghost btn-small" type="button" onClick={stopVideo}>Leave video</button>}
+      </div>
+    </div>;
+  }
 
-  return <section className="video-panel panel">
-    <div className="video-panel-head"><div><p className="eyebrow">OPTIONAL VIDEO</p><div className="font-bold mt-1">Quiet accountability, without leaving your focus room.</div></div>{joined&&<div className="video-presence"><span className="status-dot"/>{visibleParticipants.length} {visibleParticipants.length===1?"person":"people"}</div>}</div>
+  if (!open) return <div className={embedded ? "video-launch workspace-video-launch" : "video-launch"}><div><b>Optional video</b><span>Turn it on when seeing each other helps you stay accountable.</span></div><button className="btn btn-secondary" onClick={() => setOpen(true)}><Camera size={17}/>Start video</button>{error&&<span className="text-xs text-[var(--red)]">{error}</span>}</div>;
+
+  return <section className={`video-panel panel ${embedded ? "video-panel-embedded" : ""}`}>
+    {!embedded && <div className="video-panel-head"><div><p className="eyebrow">OPTIONAL VIDEO</p><div className="font-bold mt-1">Quiet accountability, without leaving your focus room.</div></div>{joined&&<div className="video-presence"><span className="status-dot"/>{visibleParticipants.length} {visibleParticipants.length===1?"person":"people"}</div>}</div>}
     {joining ? <div className="video-loading"><Loader2 className="animate-spin" size={22}/><span>Connecting camera and microphone…</span></div> : <div className={`video-grid ${visibleParticipants.length<=1?"single":"multi"}`}>{visibleParticipants.map(participant=><ParticipantTile key={participant.session_id} participant={participant}/>)}</div>}
     <div className="video-controls">
       <button className={`video-control ${cameraOn?"active":""}`} onClick={toggleCamera} disabled={!joined}>{cameraOn?<Video size={18}/>:<VideoOff size={18}/>}<span>{cameraOn?"Camera on":"Camera off"}</span></button>
