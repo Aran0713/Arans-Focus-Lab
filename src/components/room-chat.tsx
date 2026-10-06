@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Download, FileText, Image as ImageIcon, Loader2, MessageCircle, Paperclip, Send, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { FocusRoom, RoomMessage, RoomMessageAttachment } from "@/lib/types";
@@ -10,7 +10,7 @@ const ACCEPTED_EXTENSIONS = new Set(["pdf","png","jpg","jpeg","gif","webp","txt"
 const ACCEPT = ".pdf,.png,.jpg,.jpeg,.gif,.webp,.txt,.md,.csv,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip";
 const URL_RE = /(https?:\/\/[^\s]+)/g;
 
-type ChatTab = "chat" | "files";
+type ChatTab = "tasks" | "chat" | "files";
 type MessageWithFiles = RoomMessage & { attachments: RoomMessageAttachment[] };
 
 function safeFileName(name: string) {
@@ -49,15 +49,17 @@ export function RoomChat({
   visible,
   onClose,
   onUnreadChange,
+  tasksSlot,
 }: {
   room: FocusRoom;
   visible: boolean;
   onClose: () => void;
   onUnreadChange?: (count: number) => void;
+  tasksSlot?: ReactNode;
 }) {
   const supabase = useMemo(() => createClient(), []);
   const [userId, setUserId] = useState<string | null>(null);
-  const [tab, setTab] = useState<ChatTab>("chat");
+  const [tab, setTab] = useState<ChatTab>("tasks");
   const [messages, setMessages] = useState<MessageWithFiles[]>([]);
   const [draft, setDraft] = useState("");
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
@@ -254,19 +256,21 @@ export function RoomChat({
   return (
     <section className="room-chat panel" aria-label="Shared room chat">
       <div className="room-chat-head">
-        <div className="room-chat-title"><MessageCircle size={16} /><span><b>Room chat</b><small>Keep messages quick. Keep working.</small></span></div>
-        <div className="room-chat-head-actions">
-          <button type="button" className={tab === "chat" ? "active" : ""} onClick={() => setTab("chat")}>Chat</button>
+        <div className="room-chat-tabs zoom-tabs">
+          <button type="button" className={tab === "tasks" ? "active" : ""} onClick={() => setTab("tasks")}>Tasks</button>
+          <button type="button" className={tab === "chat" ? "active" : ""} onClick={() => setTab("chat")}>Chat{unread > 0 ? <span>{unread > 9 ? "9+" : unread}</span> : null}</button>
           <button type="button" className={tab === "files" ? "active" : ""} onClick={() => setTab("files")}>Files{files.length > 0 ? <span>{files.length}</span> : null}</button>
-          <button className="room-chat-close" type="button" aria-label="Hide chat" onClick={onClose}><X size={17} /></button>
         </div>
+        <button className="room-chat-close" type="button" aria-label="Hide side panel" onClick={onClose}><X size={17} /></button>
       </div>
+
+      {tab === "tasks" && <div className="room-task-panel">{tasksSlot}</div>}
 
       {tab === "chat" && (
         <>
           <div className="room-chat-scroll" ref={scrollRef}>
             {loading ? <div className="room-chat-empty"><Loader2 className="animate-spin" size={19} />Loading messages…</div> : messages.length === 0 ? (
-              <div className="room-chat-empty"><MessageCircle size={24} /><b>Quiet room, for now.</b><span>Send a quick note, link, image, or study file without leaving focus.</span></div>
+              <div className="room-chat-empty"><MessageCircle size={22} /><b>No messages yet.</b><span>Use chat for quick coordination, then get back to the work.</span></div>
             ) : messages.map((message) => {
               const mine = message.sender_id === userId;
               const name = mine ? "You" : (memberNames.get(message.sender_id) ?? "Focus partner");
