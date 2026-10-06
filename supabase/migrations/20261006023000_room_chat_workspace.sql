@@ -16,6 +16,16 @@ as $$
   )
 $$;
 
+create or replace function private.is_active_room(p_room uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path=''
+as $
+  select exists(select 1 from public.focus_rooms r where r.id=p_room and r.status='active')
+$;
+
 create or replace function private.file_room_id(p_name text)
 returns uuid
 language plpgsql
@@ -31,6 +41,7 @@ end
 $$;
 
 grant execute on function private.is_room_member(uuid,boolean) to authenticated;
+grant execute on function private.is_active_room(uuid) to authenticated;
 grant execute on function private.file_room_id(text) to authenticated;
 
 create table if not exists public.room_messages(
@@ -59,7 +70,7 @@ for insert to authenticated
 with check (
   sender_id=auth.uid()
   and private.is_room_member(room_id,true)
-  and exists(select 1 from public.focus_rooms r where r.id=room_id and r.status='active')
+  and private.is_active_room(room_id)
 );
 
 drop policy if exists room_messages_delete_own on public.room_messages;
@@ -137,7 +148,7 @@ with check (
   bucket_id='focus-room-files'
   and split_part(name,'/',2)=auth.uid()::text
   and private.is_room_member(private.file_room_id(name),true)
-  and exists(select 1 from public.focus_rooms r where r.id=private.file_room_id(name) and r.status='active')
+  and private.is_active_room(private.file_room_id(name))
 );
 
 drop policy if exists focus_room_files_delete_own on storage.objects;
