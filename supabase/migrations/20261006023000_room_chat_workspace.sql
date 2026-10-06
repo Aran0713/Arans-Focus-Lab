@@ -22,9 +22,9 @@ language sql
 stable
 security definer
 set search_path=''
-as $
+as $$
   select exists(select 1 from public.focus_rooms r where r.id=p_room and r.status='active')
-$;
+$$;
 
 create or replace function private.file_room_id(p_name text)
 returns uuid
