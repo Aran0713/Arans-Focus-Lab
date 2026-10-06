@@ -182,3 +182,149 @@
   .room-chat{height:min(62dvh,560px)}
   .sidebar-task-person{padding:10px}
 }
+
+
+/* Compact desktop room: keep people, video controls, timer and side panel visible together */
+@media(min-width:901px){
+  .focus-room-page{
+    padding:8px 0 10px;
+    min-height:0;
+  }
+  .focus-workspace-container{
+    width:min(1900px,calc(100% - 14px))!important;
+  }
+  .focus-workspace-shell{
+    height:calc(100dvh - 90px);
+    min-height:0;
+    overflow:hidden;
+    border-radius:17px;
+  }
+  .focus-workspace-head{
+    flex:none;
+    grid-template-columns:minmax(205px,.58fr) minmax(390px,1.18fr) auto;
+    gap:10px;
+    padding:8px 11px;
+    min-height:68px;
+  }
+  .focus-workspace-title .eyebrow{font-size:9px}
+  .focus-workspace-title h1{font-size:clamp(18px,1.35vw,24px);line-height:1.05}
+  .focus-workspace-title>div{margin-top:3px;font-size:10px}
+  .workspace-member-timers{gap:7px}
+  .workspace-member-timer{
+    min-width:145px;
+    max-width:195px;
+    grid-template-columns:28px minmax(0,1fr) auto;
+    gap:7px;
+    padding:6px 8px;
+    border-radius:11px;
+  }
+  .workspace-member-avatar{width:28px;height:28px;font-size:8px}
+  .workspace-member-timer b{font-size:9px}
+  .workspace-member-timer small{font-size:8px}
+  .workspace-member-timer strong{font-size:13px}
+  .workspace-layout-menu summary{min-height:34px;padding:0 10px;font-size:10px}
+
+  .focus-workspace-body{
+    flex:1;
+    min-height:0;
+    overflow:hidden;
+    grid-template-columns:minmax(0,1fr) minmax(315px,355px);
+  }
+  .focus-workspace-main{
+    min-height:0;
+    height:100%;
+    padding:7px;
+  }
+  .workspace-video-wrap{
+    min-height:0;
+    height:100%;
+  }
+  .video-panel-embedded{
+    height:100%;
+    min-height:0;
+    border-radius:15px;
+  }
+  .video-panel-embedded .video-grid{
+    flex:1;
+    min-height:0!important;
+    height:auto;
+    padding:7px;
+    gap:7px;
+  }
+  .video-panel-embedded .video-tile{
+    min-height:0;
+    height:100%;
+    border-radius:12px;
+  }
+  .video-panel-embedded .video-controls{
+    flex:none;
+    padding:7px 8px;
+    gap:6px;
+  }
+  .video-panel-embedded .video-control{
+    min-height:34px;
+    padding:0 10px;
+    border-radius:9px;
+    font-size:9px;
+    gap:6px;
+  }
+  .video-panel-embedded .video-control svg{width:15px;height:15px}
+
+  .focus-workspace-chat{
+    min-height:0;
+    height:100%;
+    padding:7px 7px 7px 0;
+  }
+  .room-chat{
+    height:100%;
+    min-height:0!important;
+    max-height:none!important;
+    border-radius:15px;
+  }
+  .room-chat-head{min-height:43px}
+  .room-chat-tabs.zoom-tabs button{min-height:42px;font-size:9px;padding:0 8px}
+  .room-task-panel{padding:9px}
+  .sidebar-task-content{gap:9px}
+  .sidebar-task-intro{padding-bottom:6px}
+  .sidebar-task-intro>span{font-size:9px}
+  .sidebar-task-person{padding:9px;border-radius:11px}
+  .sidebar-task-person .goals{margin-top:7px!important;gap:5px}
+  .sidebar-task-person .goal{padding:6px 7px;font-size:9px}
+  .sidebar-task-person .inline-add{padding:6px 7px;font-size:9px}
+  .sidebar-task-person .btn-small{min-height:28px;font-size:9px}
+  .sidebar-task-person .goal-actions .icon-btn{width:26px;height:26px}
+
+  .focus-workspace-controls{
+    position:static;
+    flex:none;
+    min-height:58px;
+    margin:0 7px 7px;
+    padding:6px 8px;
+    gap:10px;
+    border-radius:14px;
+  }
+  .workspace-main-timer{
+    min-width:205px;
+    padding:4px 20px;
+  }
+  .workspace-main-timer strong{font-size:19px}
+  .workspace-main-timer span{font-size:8px}
+  .workspace-timer-actions .btn{
+    min-height:36px;
+    padding:0 12px;
+    font-size:10px;
+  }
+  .workspace-quick-actions button{min-height:34px;font-size:10px}
+}
+@media(min-width:901px) and (max-height:760px){
+  .focus-workspace-shell{height:calc(100dvh - 84px)}
+  .focus-workspace-head{min-height:60px;padding:6px 10px}
+  .focus-workspace-title .eyebrow{display:none}
+  .focus-workspace-title h1{font-size:18px}
+  .focus-workspace-title>div{font-size:9px}
+  .workspace-member-timer{padding:5px 7px}
+  .workspace-member-avatar{width:25px;height:25px}
+  .video-panel-embedded .video-controls{padding:5px 7px}
+  .video-panel-embedded .video-control{min-height:31px}
+  .focus-workspace-controls{min-height:52px;padding:5px 7px}
+}
