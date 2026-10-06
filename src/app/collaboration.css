@@ -55,3 +55,71 @@
   .focus-workspace-chat{padding:7px}.room-chat{height:62dvh;min-height:400px;border-radius:14px}.room-chat-tabs button{padding:0 8px;font-size:10px}.room-chat-hint{display:none}
   .focus-workspace-controls{bottom:73px}.workspace-main-timer strong{font-size:18px}.workspace-main-timer span{font-size:8px}.workspace-timer-actions .btn{min-height:38px}.workspace-timer-actions .btn svg{display:none}.workspace-quick-actions button{min-height:34px}
 }
+
+
+/* Task-first shared workspace refinement */
+@media(min-width:901px){
+  .focus-room-page{padding:14px 0 24px}
+  .focus-workspace-container{width:min(1880px,calc(100% - 24px))!important;max-width:none!important}
+  .focus-workspace-shell{border-radius:20px}
+  .focus-workspace-head{grid-template-columns:minmax(230px,.62fr) minmax(420px,1.45fr) auto;padding:14px 16px;gap:14px}
+  .focus-workspace-title h1{font-size:clamp(20px,1.55vw,27px)}
+  .focus-workspace-body{grid-template-columns:minmax(0,1fr) minmax(300px,350px);align-items:stretch}
+  .focus-workspace-main{grid-template-columns:minmax(440px,1.48fr) minmax(300px,.72fr);grid-template-areas:"goals video";gap:10px;padding:10px;align-items:start}
+  .workspace-goals,.workspace-reopen-bar{grid-area:goals}
+  .workspace-video-wrap{grid-area:video;min-width:0}
+  .workspace-goals{min-height:440px;max-height:calc(100dvh - 246px);overflow:auto}
+  .workspace-video-label{display:flex}
+  .workspace-video-launch{min-height:180px}
+  .video-panel-embedded .video-grid{min-height:0}
+  .video-panel-embedded .video-tile{aspect-ratio:16/10}
+  .video-panel-embedded .video-controls{padding:8px 10px}
+  .video-panel-embedded .video-control{min-height:38px}
+  .focus-workspace-chat{align-self:stretch;display:flex;padding:10px 10px 10px 0;min-height:0}
+  .room-chat{height:clamp(440px,calc(100dvh - 246px),650px);min-height:0;width:100%}
+  .focus-workspace-controls{position:sticky;bottom:10px;margin:0 10px 10px}
+}
+
+.workspace-video-label{display:none;align-items:center;justify-content:space-between;gap:10px;margin:0 2px 7px;color:var(--muted);font-size:10px;font-weight:850;letter-spacing:.02em}
+.workspace-video-label>span{display:flex;align-items:center;gap:6px}
+.workspace-video-label button{padding:5px 7px;border-radius:8px;color:var(--muted)}
+.workspace-video-label button:hover{background:var(--panel2);color:var(--text)}
+.workspace-main-timer.break{border-color:color-mix(in srgb,var(--gold) 45%,var(--line));background:color-mix(in srgb,var(--gold) 10%,var(--panel2))}
+.workspace-main-timer.break strong{color:color-mix(in srgb,var(--gold) 86%,white)}
+
+.room-chat-head{padding:0 8px 0 12px;min-height:54px}
+.room-chat-title{display:flex;align-items:center;gap:8px;min-width:0}
+.room-chat-title>span{display:grid;min-width:0}
+.room-chat-title b{font-size:11px;white-space:nowrap}
+.room-chat-title small{font-size:8px;color:var(--muted);white-space:nowrap}
+.room-chat-head-actions{display:flex;align-items:center;gap:3px;flex:none}
+.room-chat-head-actions>button:not(.room-chat-close){min-height:30px;padding:0 8px;border-radius:8px;color:var(--muted);font-size:9px;font-weight:850}
+.room-chat-head-actions>button:not(.room-chat-close).active{background:var(--panel2);color:var(--text)}
+.room-chat-head-actions>button span{display:inline-grid;place-items:center;min-width:15px;height:15px;margin-left:4px;padding:0 3px;border-radius:999px;background:color-mix(in srgb,var(--blue) 14%,var(--panel));font-size:8px}
+.room-chat-scroll{padding:12px 11px;gap:10px}
+.room-chat-empty{min-height:120px;padding:18px}
+.room-chat-compose{padding:8px}
+.room-chat-hint{padding-left:45px;margin-top:4px;font-size:7.5px}
+.room-chat-compose textarea{font-size:11px}
+.room-message{max-width:96%}
+.room-message-bubble{font-size:11px;padding:8px 10px}
+
+@media(max-width:1180px) and (min-width:901px){
+  .focus-workspace-container{width:min(100% - 18px,1500px)!important}
+  .focus-workspace-head{grid-template-columns:minmax(190px,.65fr) minmax(330px,1.3fr) auto}
+  .focus-workspace-body{grid-template-columns:minmax(0,1fr) minmax(280px,320px)}
+  .focus-workspace-main{grid-template-columns:minmax(360px,1.35fr) minmax(260px,.65fr)}
+  .workspace-member-timer{min-width:145px}
+  .room-chat-title small{display:none}
+}
+
+@media(max-width:900px){
+  .workspace-video-label{display:flex;margin:0 2px 6px}
+  .focus-workspace-main{display:flex;flex-direction:column}
+  .workspace-goals{order:1;width:100%}
+  .workspace-video-wrap{order:2;width:100%}
+  .workspace-reopen-bar{order:1}
+  .focus-workspace-chat{order:3}
+  .room-chat-head{min-height:50px}
+  .room-chat-title small{display:none}
+}
