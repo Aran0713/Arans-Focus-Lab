@@ -44,7 +44,7 @@ export async function POST(request: Request) {
           enable_people_ui: true,
           enable_prejoin_ui: true,
           enable_chat: false,
-          enable_screenshare: false,
+          enable_screenshare: true,
           enable_recording: false,
           start_video_off: false,
           eject_at_room_exp: true,
@@ -55,6 +55,18 @@ export async function POST(request: Request) {
       const detail = await created.text();
       console.error("Daily room creation failed", created.status, detail);
       return jsonError("Couldn’t start video right now.", 502);
+    }
+  } else if (existing.ok) {
+    // Preview feature: ensure existing focus rooms also allow screen sharing.
+    const updated = await fetch(`${DAILY_API}/rooms/${roomName}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ properties: { enable_screenshare: true } }),
+    });
+    if (!updated.ok) {
+      const detail = await updated.text();
+      console.error("Daily room screen-share update failed", updated.status, detail);
+      return jsonError("Couldn’t enable screen sharing right now.", 502);
     }
   } else if (!existing.ok) {
     const detail = await existing.text();
@@ -73,7 +85,7 @@ export async function POST(request: Request) {
         is_owner: false,
         user_name: access.user_name,
         user_id: access.user_id,
-        enable_screenshare: false,
+        enable_screenshare: true,
         enable_recording: false,
         start_video_off: false,
         start_cloud_recording: false,
