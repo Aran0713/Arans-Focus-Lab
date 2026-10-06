@@ -36,15 +36,6 @@ begin
     'if target_count<1 or target_count>5 then raise exception ''Choose one to five focus partners.''; end if;'
   );
 
-  if position('if target_count<1 or target_count>3 then raise exception ''Choose one to three focus partners.''; end if;' in fn)=0 then
-    raise exception 'Expected scheduled-session partner limit was not found.';
-  end if;
-  fn := replace(
-    fn,
-    'if target_count<1 or target_count>3 then raise exception ''Choose one to three focus partners.''; end if;',
-    'if target_count<1 or target_count>5 then raise exception ''Choose one to five focus partners.''; end if;'
-  );
-
   if fn=original then
     raise exception 'No room-capacity changes were applied.';
   end if;
