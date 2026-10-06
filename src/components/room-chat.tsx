@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Download, FileText, Image as ImageIcon, Link2, Loader2, MessageCircle, Paperclip, Send, Target, X } from "lucide-react";
+import { Download, FileText, Image as ImageIcon, Loader2, MessageCircle, Paperclip, Send, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { FocusRoom, RoomMessage, RoomMessageAttachment } from "@/lib/types";
 
@@ -10,7 +10,7 @@ const ACCEPTED_EXTENSIONS = new Set(["pdf","png","jpg","jpeg","gif","webp","txt"
 const ACCEPT = ".pdf,.png,.jpg,.jpeg,.gif,.webp,.txt,.md,.csv,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip";
 const URL_RE = /(https?:\/\/[^\s]+)/g;
 
-type ChatTab = "chat" | "files" | "links" | "goals";
+type ChatTab = "chat" | "files";
 type MessageWithFiles = RoomMessage & { attachments: RoomMessageAttachment[] };
 
 function safeFileName(name: string) {
@@ -250,29 +250,16 @@ export function RoomChat({
   }
 
   const files = useMemo(() => messages.flatMap((message) => message.attachments.map((attachment) => ({ attachment, message }))), [messages]);
-  const links = useMemo(() => messages.flatMap((message) => {
-    const matches = message.body.match(URL_RE) ?? [];
-    return matches.map((url) => ({ url: url.replace(/[),.;!?]+$/, ""), message }));
-  }), [messages]);
-
-  const tabs: Array<{ id: ChatTab; label: string; icon: typeof MessageCircle; count?: number }> = [
-    { id: "chat", label: "Chat", icon: MessageCircle },
-    { id: "files", label: "Files", icon: FileText, count: files.length },
-    { id: "links", label: "Links", icon: Link2, count: links.length },
-    { id: "goals", label: "Goals", icon: Target },
-  ];
 
   return (
     <section className="room-chat panel" aria-label="Shared room chat">
       <div className="room-chat-head">
-        <div className="room-chat-tabs">
-          {tabs.map(({ id, label, count }) => (
-            <button key={id} type="button" className={tab === id ? "active" : ""} onClick={() => setTab(id)}>
-              {label}{typeof count === "number" && count > 0 ? <span>{count}</span> : null}
-            </button>
-          ))}
+        <div className="room-chat-title"><MessageCircle size={16} /><span><b>Room chat</b><small>Keep messages quick. Keep working.</small></span></div>
+        <div className="room-chat-head-actions">
+          <button type="button" className={tab === "chat" ? "active" : ""} onClick={() => setTab("chat")}>Chat</button>
+          <button type="button" className={tab === "files" ? "active" : ""} onClick={() => setTab("files")}>Files{files.length > 0 ? <span>{files.length}</span> : null}</button>
+          <button className="room-chat-close" type="button" aria-label="Hide chat" onClick={onClose}><X size={17} /></button>
         </div>
-        <button className="room-chat-close" type="button" aria-label="Hide chat" onClick={onClose}><X size={17} /></button>
       </div>
 
       {tab === "chat" && (
@@ -318,7 +305,7 @@ export function RoomChat({
               }} />
               <button type="submit" className="room-chat-send" aria-label="Send message" disabled={sending || (!draft.trim() && pendingFiles.length === 0)}>{sending ? <Loader2 className="animate-spin" size={17} /> : <Send size={18} />}</button>
             </div>
-            <div className="room-chat-hint">Enter to send · Shift+Enter for a new line · up to 5 files, 20 MB each</div>
+            <div className="room-chat-hint">Enter to send · Attach up to 5 files, 20 MB each</div>
           </form>
         </>
       )}
@@ -331,22 +318,6 @@ export function RoomChat({
         </button>) : <div className="room-chat-empty"><FileText size={24} /><b>No files yet.</b><span>Files shared in chat will collect here automatically.</span></div>}
       </div>}
 
-      {tab === "links" && <div className="room-chat-library">
-        {links.length ? links.map(({ url, message }, index) => <a className="room-library-row" href={url} target="_blank" rel="noopener noreferrer" key={`${message.id}-${index}`}>
-          <span className="room-message-file-icon"><Link2 size={18} /></span>
-          <span><b>{url}</b><small>{memberNames.get(message.sender_id) ?? "You"}</small></span>
-        </a>) : <div className="room-chat-empty"><Link2 size={24} /><b>No links yet.</b><span>Useful links shared in chat will stay easy to find.</span></div>}
-      </div>}
-
-      {tab === "goals" && <div className="room-chat-library room-chat-goals">
-        {room.members.filter((member) => member.is_present).map((member) => {
-          const goals = [...(member.session?.goals ?? [])].sort((a, b) => a.position - b.position);
-          return <div className="room-chat-goal-person" key={member.user_id}>
-            <div><b>{member.user_id === userId ? "You" : member.name}</b><span>{member.session?.title || member.title || "Shared focus"}</span></div>
-            {goals.length ? goals.map((goal) => <div className={`room-chat-goal ${goal.completed ? "done" : ""}`} key={goal.id}><span>{goal.completed ? "✓" : ""}</span>{goal.text}</div>) : <div className="muted text-sm">No goals added yet.</div>}
-          </div>;
-        })}
-      </div>}
     </section>
   );
 }
