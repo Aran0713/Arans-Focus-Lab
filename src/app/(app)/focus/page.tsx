@@ -389,7 +389,7 @@ function SharedFocusWorkspace({ session, room, onFinished }: { session: FocusSes
   const isPomodoro = session.mode === "timed" && session.duration === 25 * 60;
   const remaining = session.duration ? Math.max(0, session.duration * 1000 - totals.focusMs) : null;
   const pomodoroRemaining = isPomodoro && !isBreak ? Math.max(0, 25 * 60 * 1000 - currentIntervalMs) : null;
-  const displayed = isBreak ? totals.focusMs : isPomodoro && pomodoroRemaining !== null ? pomodoroRemaining : session.mode === "timed" && remaining !== null ? remaining : totals.focusMs;
+  const displayed = isBreak ? currentIntervalMs : isPomodoro && pomodoroRemaining !== null ? pomodoroRemaining : session.mode === "timed" && remaining !== null ? remaining : totals.focusMs;
   const presentMembers = room.members.filter((member) => member.is_present);
   const otherNames = presentMembers.filter((member) => member.user_id !== user?.id).map((member) => member.name);
   const roomTitle = otherNames.length ? `Focus with ${otherNames.join(", ")}` : "Shared focus";
@@ -439,10 +439,6 @@ function SharedFocusWorkspace({ session, room, onFinished }: { session: FocusSes
 
       <div className="focus-workspace-body">
         <div className="focus-workspace-main">
-          <div className="workspace-video-wrap">
-            <VideoPanel roomId={room.id} embedded collapsed={!showVideo} onExpand={() => setShowVideo(true)} />
-          </div>
-
           {showGoals ? (
             <section className="workspace-goals">
               <div className="workspace-section-head">
@@ -466,6 +462,11 @@ function SharedFocusWorkspace({ session, room, onFinished }: { session: FocusSes
           ) : (
             <button type="button" className="workspace-reopen-bar" onClick={() => setShowGoals(true)}><Target size={17} /><span>Goals hidden</span><b>Show goals</b></button>
           )}
+
+          <div className="workspace-video-wrap">
+            <div className="workspace-video-label"><span><VideoIcon size={15} />Accountability video</span><button type="button" onClick={() => setShowVideo((value) => !value)}>{showVideo ? "Hide" : "Show"}</button></div>
+            <VideoPanel roomId={room.id} embedded collapsed={!showVideo} onExpand={() => setShowVideo(true)} />
+          </div>
         </div>
 
         <aside className={`focus-workspace-chat ${showChat ? "" : "is-hidden"}`}>
@@ -481,7 +482,7 @@ function SharedFocusWorkspace({ session, room, onFinished }: { session: FocusSes
         </div>
         <div className="workspace-main-timer">
           <strong>{formatClock(displayed)}</strong>
-          <span>{isBreak ? `Break · ${formatClock(currentIntervalMs)}` : isPomodoro ? "Pomodoro focus" : "Focus session"}</span>
+          <span>{isBreak ? `Break timer · Focused ${formatClock(totals.focusMs)}` : isPomodoro ? "Pomodoro focus" : "Focused time"}</span>
         </div>
         <div className="workspace-timer-actions">
           {isBreak ? <button className="btn btn-primary" disabled={busy} onClick={() => command("resume", { session_id: session.id })}><RotateCcw size={16} />Resume</button> : <button className="btn btn-secondary" disabled={busy} onClick={() => command("break", { session_id: session.id })}><Coffee size={16} />Break</button>}
@@ -600,7 +601,7 @@ function FocusPageInner() {
   }
 
   const active = state.sessions.find((s) => s.status !== "finished");
-  if (active) return <main className="page"><div className={`lab-container ${active.room_id ? "focus-workspace-container" : ""}`}><ActiveTimer session={active} onFinished={setFinishedId} /></div></main>;
+  if (active) return <main className={`page ${active.room_id ? "focus-room-page" : ""}`}><div className={`lab-container ${active.room_id ? "focus-workspace-container" : ""}`}><ActiveTimer session={active} onFinished={setFinishedId} /></div></main>;
   if (state.room?.status === "waiting") return <main className="page"><div className="lab-container"><WaitingRoom /></div></main>;
   if (state.room?.status === "active") return <main className="page"><div className="lab-container"><RoomObserver room={state.room} /></div></main>;
 
