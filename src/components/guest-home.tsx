@@ -4,7 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { ArrowRight, BarChart3, Check, Clock3, LockKeyhole, Plus, Target, Users } from "lucide-react";
 import { Brand } from "@/components/brand";
-import { guestFocusModeLabel, readGuestFocusDraft, writeGuestFocusDraft, type GuestFocusDraft, type GuestFocusMode } from "@/lib/guest-focus";
+import { clearGuestFocusDraft, guestFocusModeLabel, readGuestFocusDraft, writeGuestFocusDraft, type GuestFocusDraft, type GuestFocusMode } from "@/lib/guest-focus";
 
 const parseGoals = (value: string) => value.split("\n").map((goal) => goal.trim()).filter(Boolean).slice(0, 8);
 
@@ -37,7 +37,11 @@ export function GuestHome() {
   const modeLabel = guestFocusModeLabel(draft);
 
   useEffect(() => {
-    if (!loaded || !title.trim()) return;
+    if (!loaded) return;
+    if (!title.trim()) {
+      clearGuestFocusDraft();
+      return;
+    }
     writeGuestFocusDraft(draft);
   }, [loaded, title, goalsText, mode, customMinutes]);
 
