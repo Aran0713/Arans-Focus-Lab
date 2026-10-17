@@ -25,10 +25,23 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isProtected = protectedRoots.some((root) => path === root || path.startsWith(`${root}/`));
   if (!user && isProtected) {
-    const login = request.nextUrl.clone(); login.pathname = "/login"; login.searchParams.set("next", path); return NextResponse.redirect(login);
+    const shouldTryFirst = path === "/home" || path.startsWith("/home/") || path === "/focus" || path.startsWith("/focus/");
+    if (shouldTryFirst) {
+      const landing = request.nextUrl.clone();
+      landing.pathname = "/";
+      landing.search = "";
+      return NextResponse.redirect(landing);
+    }
+    const login = request.nextUrl.clone();
+    login.pathname = "/login";
+    login.searchParams.set("next", path);
+    return NextResponse.redirect(login);
   }
   if (user && path === "/login") {
     const next = request.nextUrl.searchParams.get("next") || "/home"; return NextResponse.redirect(new URL(next, request.url));
+  }
+  if (user && path === "/start") {
+    return NextResponse.redirect(new URL("/focus?trial=1", request.url));
   }
   return response;
 }

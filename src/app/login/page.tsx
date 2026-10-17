@@ -24,16 +24,11 @@ function LoginForm() {
 
     if (mode === "signup") {
       const displayName = name.trim();
-      if (!displayName) {
-        setMessage("Add the name your focus partners should see.");
-        setBusy(false);
-        return;
-      }
       const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          data: { display_name: displayName },
+          data: displayName ? { display_name: displayName } : {},
           emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
         },
       });
@@ -57,7 +52,7 @@ function LoginForm() {
             <p className="eyebrow">SHOW UP. DO THE WORK.</p>
             <h1 className="display-title">Focus that tells the truth.</h1>
             <p className="lead max-w-xl">
-              Track real focus separately from breaks, keep your momentum visible, and work beside one trusted focus partner without turning productivity into social media.
+              Track real focus separately from breaks, keep your momentum visible, and work beside trusted friends without turning productivity into social media.
             </p>
           </div>
           <div className="quote-line">Show up → Focus → Take honest breaks → Finish → See actual effort → Improve</div>
@@ -75,8 +70,8 @@ function LoginForm() {
           <form onSubmit={submit} className="mt-6 space-y-4">
             {mode === "signup" && (
               <label className="field">
-                <span>Name · shown only to your focus partners</span>
-                <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Aran" maxLength={80} required />
+                <span>Name · optional · used only with focus partners</span>
+                <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Add later if you want" maxLength={80} />
               </label>
             )}
             <label className="field">
@@ -87,7 +82,7 @@ function LoginForm() {
               <span>Password</span>
               <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" minLength={6} required />
             </label>
-            <button disabled={busy || !isSupabaseConfigured || (mode === "signup" && !name.trim())} className="btn btn-primary w-full" type="submit">
+            <button disabled={busy || !isSupabaseConfigured} className="btn btn-primary w-full" type="submit">
               {busy ? "Working…" : mode === "signin" ? "Sign in" : "Create account"}
             </button>
           </form>

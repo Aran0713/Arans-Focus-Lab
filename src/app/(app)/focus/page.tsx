@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
+import { FormEvent, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Check,
@@ -27,6 +27,7 @@ import { useLab } from "@/components/lab-provider";
 import { VideoPanel } from "@/components/video-panel";
 import { RoomChat } from "@/components/room-chat";
 import { formatClock, formatDuration, intervalDuration, sessionTotals } from "@/lib/metrics";
+import { clearGuestFocusDraft, guestFocusDuration, readGuestFocusDraft, type GuestFocusDraft } from "@/lib/guest-focus";
 import type { FocusRoom, FocusSession, RoomMember, ScheduledSession, SharedGoal } from "@/lib/types";
 
 const parseGoals = (value: string) => value.split("\n").map((v) => v.trim()).filter(Boolean).slice(0, 8);
@@ -64,19 +65,30 @@ function PartnerPicker({ selected, onToggle }: { selected: string[]; onToggle: (
   );
 }
 
-function SessionSetup({ shared = false, schedule }: { shared?: boolean; schedule?: ScheduledSession | null }) {
+function SessionSetup({
+  shared = false,
+  schedule,
+  initialDraft = null,
+  autoStart = false,
+}: {
+  shared?: boolean;
+  schedule?: ScheduledSession | null;
+  initialDraft?: GuestFocusDraft | null;
+  autoStart?: boolean;
+}) {
   const { state, user, command, busy, broadcast } = useLab();
   const settings = state?.profile?.settings;
   const scheduledMinutes = schedule?.duration ? Math.round(schedule.duration / 60) : null;
   const schedulePartners = useMemo(() => schedule?.members.filter((m) => m.id !== user?.id).map((m) => m.id) ?? [], [schedule, user?.id]);
-  const [title, setTitle] = useState(schedule?.title ?? "");
-  const [goalsText, setGoalsText] = useState("");
+  const [title, setTitle] = useState(schedule?.title ?? initialDraft?.title ?? "");
+  const [goalsText, setGoalsText] = useState(initialDraft?.goals.join("\n") ?? "");
   const initialMode = schedule
     ? (scheduledMinutes === 25 ? "25" : scheduledMinutes === 50 ? "50" : scheduledMinutes === 90 ? "90" : "custom")
-    : (settings?.focusDefault ?? "open");
+    : (initialDraft?.mode ?? settings?.focusDefault ?? "open");
   const [mode, setMode] = useState(String(initialMode));
-  const [custom, setCustom] = useState(scheduledMinutes && ![25, 50, 90].includes(scheduledMinutes) ? scheduledMinutes : (settings?.customMinutes ?? 60));
+  const [custom, setCustom] = useState(scheduledMinutes && ![25, 50, 90].includes(scheduledMinutes) ? scheduledMinutes : (initialDraft?.customMinutes ?? settings?.customMinutes ?? 60));
   const [selectedPartners, setSelectedPartners] = useState<string[]>(schedulePartners.length ? schedulePartners : (state?.partners?.length === 1 ? [state.partners[0].id] : []));
+  const autoStartAttempted = useRef(false);
 
   useEffect(() => {
     if (schedule) {
@@ -84,6 +96,23 @@ function SessionSetup({ shared = false, schedule }: { shared?: boolean; schedule
       setSelectedPartners(schedulePartners);
     }
   }, [schedule?.id, schedule?.title, schedulePartners]);
+
+  useEffect(() => {
+    if (!autoStart || !initialDraft || shared || schedule || !state || autoStartAttempted.current) return;
+    autoStartAttempted.current = true;
+    void (async () => {
+      try {
+        await command("start", {
+          title: initialDraft.title,
+          duration: guestFocusDuration(initialDraft),
+          goals: initialDraft.goals,
+        });
+        clearGuestFocusDraft();
+      } catch {
+        autoStartAttempted.current = false;
+      }
+    })();
+  }, [autoStart, command, initialDraft, schedule, shared, state]);
 
   if (!state) return null;
   const duration = mode === "open" ? null : mode === "custom" ? Math.max(1, custom) * 60 : Number(mode) * 60;
@@ -132,6 +161,7 @@ function SessionSetup({ shared = false, schedule }: { shared?: boolean; schedule
         </div>
         {mode === "custom" && <label className="field max-w-[180px]"><span>Minutes</span><input type="number" min={1} max={720} value={custom} onChange={(e) => setCustom(Number(e.target.value))} /></label>}
         {mode === "25" && <div className="info-box">Pomodoro repeats 25-minute focus rounds with 5-minute break targets while actual focus and break time stay recorded separately.</div>}
+        {autoStart && initialDraft && <div className="info-box"><b>Your plan made it through.</b> Starting the focus session you set up before creating your account…</div>}
         <button className="btn btn-primary" disabled={busy || !title.trim() || (shared && selectedPartners.length === 0) || (shared && !allScheduledCommitted)}>{busy ? "Starting…" : shared ? "Create shared room" : "Start Focus"}</button>
       </form>
     </section>
@@ -575,9 +605,22 @@ function FocusPageInner() {
   const { state, loading, user, command } = useLab();
   const params = useSearchParams();
   const scheduleId = params.get("schedule");
+  const trial = params.get("trial") === "1";
   const scheduled = state?.schedules.find((s) => s.id === scheduleId) ?? null;
   const [shared, setShared] = useState(Boolean(scheduleId));
   const [finishedId, setFinishedId] = useState<string | null>(null);
+  const [trialDraft, setTrialDraft] = useState<GuestFocusDraft | null>(null);
+  const [trialLoaded, setTrialLoaded] = useState(!trial);
+
+  useEffect(() => {
+    if (!trial) {
+      setTrialDraft(null);
+      setTrialLoaded(true);
+      return;
+    }
+    setTrialDraft(readGuestFocusDraft());
+    setTrialLoaded(true);
+  }, [trial]);
 
   if (loading || !state) return <main className="page"><div className="lab-container muted">Loading your session…</div></main>;
 
@@ -602,6 +645,8 @@ function FocusPageInner() {
   if (state.room?.status === "waiting") return <main className="page"><div className="lab-container"><WaitingRoom /></div></main>;
   if (state.room?.status === "active") return <main className="page"><div className="lab-container"><RoomObserver room={state.room} /></div></main>;
 
+  if (trial && !trialLoaded) return <main className="page"><div className="lab-container muted">Restoring your focus plan…</div></main>;
+
   const scheduleAccepted = scheduled?.rsvps.includes(user?.id ?? "") ?? false;
   const partners = state.partners ?? [];
   const availableRooms = state.available_rooms ?? [];
@@ -613,7 +658,12 @@ function FocusPageInner() {
           <div><p className="eyebrow">FOCUS</p><h1 className="text-4xl sm:text-5xl font-extrabold tracking-[-.045em] mt-2">Begin with clarity.</h1>{scheduled && !scheduleAccepted && <p className="muted text-sm mt-2">You have not RSVP’d to this scheduled session yet. Confirm from Home first.</p>}</div>
           {partners.length > 0 && !scheduled && <div className="segmented"><button className={!shared ? "active" : ""} onClick={() => setShared(false)}>Solo</button><button className={shared ? "active" : ""} onClick={() => setShared(true)}>Shared room</button></div>}
         </div>
-        <SessionSetup shared={scheduled ? true : shared} schedule={scheduled} />
+        <SessionSetup
+          shared={scheduled ? true : shared}
+          schedule={scheduled}
+          initialDraft={trial && !scheduled && !shared ? trialDraft : null}
+          autoStart={Boolean(trial && trialDraft && !scheduled && !shared)}
+        />
       </div>
     </main>
   );
