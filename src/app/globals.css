@@ -58,8 +58,9 @@
 @media(max-width:900px){
   .guest-main{padding:28px 0 54px}
   .guest-hero{grid-template-columns:1fr;gap:30px;min-height:0}
+  .guest-builder{order:1;padding:20px}
+  .guest-hero-copy{order:2}
   .guest-hero-copy h1{font-size:clamp(46px,14vw,70px)}
-  .guest-builder{padding:20px}
   .guest-product-strip,.guest-how{grid-template-columns:1fr}
   .guest-how{margin:44px 0;gap:16px}
   .guest-final-cta{align-items:flex-start;flex-direction:column}
