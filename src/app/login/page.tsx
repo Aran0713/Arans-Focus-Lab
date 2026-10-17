@@ -52,7 +52,7 @@ function LoginForm() {
             <p className="eyebrow">SHOW UP. DO THE WORK.</p>
             <h1 className="display-title">Focus that tells the truth.</h1>
             <p className="lead max-w-xl">
-              Track real focus separately from breaks, keep your momentum visible, and work beside one trusted focus partner without turning productivity into social media.
+              Track real focus separately from breaks, keep your momentum visible, and work beside trusted friends without turning productivity into social media.
             </p>
           </div>
           <div className="quote-line">Show up → Focus → Take honest breaks → Finish → See actual effort → Improve</div>
