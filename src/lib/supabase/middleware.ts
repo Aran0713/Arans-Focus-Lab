@@ -30,5 +30,8 @@ export async function updateSession(request: NextRequest) {
   if (user && path === "/login") {
     const next = request.nextUrl.searchParams.get("next") || "/home"; return NextResponse.redirect(new URL(next, request.url));
   }
+  if (user && path === "/start") {
+    return NextResponse.redirect(new URL("/focus?trial=1", request.url));
+  }
   return response;
 }
