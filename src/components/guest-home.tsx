@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { ArrowRight, BarChart3, Check, Clock3, LockKeyhole, Play, Plus, Target, Users } from "lucide-react";
+import { ArrowRight, BarChart3, Check, Clock3, LockKeyhole, Plus, Target, Users } from "lucide-react";
 import { Brand } from "@/components/brand";
 import { guestFocusModeLabel, readGuestFocusDraft, writeGuestFocusDraft, type GuestFocusDraft, type GuestFocusMode } from "@/lib/guest-focus";
 
@@ -48,7 +48,7 @@ export function GuestHome() {
     window.location.assign("/start");
   }
 
-  return <div className="guest-shell">
+  return <div className="guest-shell" id="top">
     <header className="guest-nav">
       <div className="lab-container guest-nav-inner">
         <Brand compact />
